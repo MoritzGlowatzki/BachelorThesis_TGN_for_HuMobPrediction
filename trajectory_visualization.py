@@ -1,11 +1,12 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.animation import FuncAnimation
-from data_IO import *
+
+from I_data_IO import *
 
 # Constants
 RAW_SMALL_DATA_PATH = "./data/cityA-dataset-small.csv"
-DAY = 0
+DAY = 3
 NUM_FRAMES = 48
 
 # Load data
@@ -13,15 +14,18 @@ df = load_csv_file(RAW_SMALL_DATA_PATH)
 df_day = df[df['d'] == DAY]
 df_day_size = len(df_day)
 
-# Set up figure and axes
-fig, ax = plt.subplots(figsize=(10, 10))
-ax.set_xlabel('X', fontsize=12)
-ax.set_ylabel('Y', fontsize=12)
-ax.set_title(label=f'Trajectory uid=0 on day {DAY}', fontsize=21, fontweight='bold')
-
 # Grid and ticks
 min_x, max_x = df_day['x'].min() - 2, df_day['x'].max() + 2
 min_y, max_y = df_day['y'].min() - 2, df_day['y'].max() + 2
+
+# Set up figure and axes
+plot_dimensions_x = (max_x - min_x) / 2
+plot_dimensions_y = (max_y - min_y) / 2
+fig, ax = plt.subplots(
+    figsize=(10 if plot_dimensions_x < 10 else plot_dimensions_x, 10 if plot_dimensions_y < 10 else plot_dimensions_y))
+ax.set_xlabel('X', fontsize=12)
+ax.set_ylabel('Y', fontsize=12)
+ax.set_title(label=f'Trajectory uid=0 on day {DAY}', fontsize=21, fontweight='bold')
 
 ax.set_xticks(np.arange(min_x, max_x + 1, 1))
 ax.set_xticks(np.arange(-0.5, 200, 1), minor=True)
@@ -38,7 +42,7 @@ ax.set_aspect("equal")
 line, = ax.plot([], [], alpha=0.7)
 scat_past = ax.scatter([], [], zorder=2)
 scat_current = ax.scatter([], [], color="red", zorder=3)
-quiver = ax.quiver(0, 0, 0, 0, angles="xy", scale_units="xy", scale=1, width=0.01)
+quiver = ax.quiver(0, 0, 0, 0, angles="xy", scale_units="xy", scale=1, width=0.005)
 time_text = ax.annotate(
     '',
     xy=(0, 1),
@@ -50,6 +54,7 @@ time_text = ax.annotate(
     va='top',
     bbox=dict(facecolor='white', alpha=0.8)
 )
+plt.tight_layout()
 
 def animate(i):
     tmp = df_day[df_day['t'] <= i]
@@ -95,4 +100,4 @@ def animate(i):
 
 # Create and save animation
 anim = FuncAnimation(fig, animate, frames=NUM_FRAMES + 1, interval=500, repeat=False)
-anim.save(f'trajectory_0_day{DAY}.gif', writer='Pillow')
+anim.save(f'./output/trajectory_0_day{DAY}.gif', writer='Pillow', dpi=80)
