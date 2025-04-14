@@ -9,7 +9,8 @@ def load_csv_file(path):
 def store_csv_file(path, content):
     content.to_csv(path, index=False)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     # read the CSV file
     data = load_csv_file(RAW_DATA_PATH)
 

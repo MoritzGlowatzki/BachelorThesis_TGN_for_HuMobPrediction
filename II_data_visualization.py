@@ -5,7 +5,7 @@ from tqdm import tqdm
 
 from III_data_preprocessing import estimate_home_location, estimate_work_location
 from I_data_IO import *
-from trajectory_visualization import create_single_trajectory_gif
+from trajectory_visualization import create_single_trajectory_gif, create_real_vs_predicted_trajectory_gif
 
 # -------- Preliminaries -------- #
 DATA_PATHS = {
@@ -13,10 +13,9 @@ DATA_PATHS = {
     "B": "./data/cityB-dataset.csv",
     "C": "./data/cityC-dataset.csv",
     "D": "./data/cityD-dataset.csv",
-    "A-small": "./data/cityA-dataset-small.csv"
+    "A-small": "./data/cityA-dataset-small.csv",
+    "Test": "./data/cityA-test.csv"
 }
-RAW_SMALL_DATA_PATH = "./data/cityA-dataset-small.csv"
-
 
 def plot_daily_data_records_per_city():
     labels_map = ["City A", "City B", "City C", "City D"]
@@ -107,7 +106,7 @@ def plot_gravitational_centres(dataset_index, uid):
             ax.axhline(y=home_y, color="orange", linestyle="--", linewidth=1)
             ax.text(home_x + 2, home_y + 2, f"Home ({home_x}, {home_y})",
                     color="white", fontsize=11, fontweight="bold",
-                    bbox=dict(facecolor='orange', alpha=0.85, edgecolor='orange', boxstyle='round,pad=0.15'))
+                    bbox=dict(facecolor="orange", alpha=0.85, edgecolor="orange", boxstyle="round,pad=0.15"))
 
         if show_work:
             work_x, work_y = estimate_work_location(filtered_data)
@@ -116,20 +115,20 @@ def plot_gravitational_centres(dataset_index, uid):
             ax.axhline(y=work_y, color="orange", linestyle="--", linewidth=1)
             ax.text(work_x + 2, work_y + 2, f"Work ({work_x}, {work_y})",
                     color="white", fontsize=11, fontweight="bold",
-                    bbox=dict(facecolor='orange', alpha=0.85, edgecolor='orange', boxstyle='round,pad=0.15'))
+                    bbox=dict(facecolor="orange", alpha=0.85, edgecolor="orange", boxstyle="round,pad=0.15"))
 
         # -------- Final plot adaptations -------- #
         ax.set_xlim(x_min, x_max)
         ax.set_ylim(y_min, y_max)
-        ax.set_title(titles[idx], fontsize=16, fontweight='bold')
+        ax.set_title(titles[idx], fontsize=16, fontweight="bold")
         ax.set_xlabel("X")
         ax.set_ylabel("Y")
         ax.set_aspect("equal")
 
-    plt.suptitle(f"Gravitational Centres for uid={uid}", fontsize=24, fontweight='bold')
+    plt.suptitle(f"Gravitational Centres for uid={uid}", fontsize=24, fontweight="bold")
 
     # -------- Save and show plot -------- #
-    plt.savefig(f"./output/gravitational_centres_uid_{uid}.png", dpi=300, bbox_inches='tight', pad_inches=0.5)
+    plt.savefig(f"./output/gravitational_centres_uid_{uid}.png", dpi=300, bbox_inches="tight", pad_inches=0.5)
     plt.show()
 
 
@@ -139,9 +138,16 @@ def visualize_trajectory(dataset_index, uid, day):
     create_single_trajectory_gif(filtered_data)
 
 
+def visualize_real_and_predicted_trajectory(dataset_index, uid, day):
+    data = load_csv_file(DATA_PATHS[dataset_index])
+    filtered_data = data[(data["uid"] == uid) & (data["d"] == day)]
+    create_real_vs_predicted_trajectory_gif(filtered_data)
+
+
 if __name__ == "__main__":
     # plot_daily_data_records_per_city()
-    for i in tqdm(range(0, 3), total=3):
-        plot_gravitational_centres("A", i)
+    # for i in tqdm(range(0, 3), total=3):
+    #     plot_gravitational_centres("A", i)
     # plot_gravitational_centres("A-small", 0)
     # visualize_trajectory("A-small", 0, 0)
+    visualize_real_and_predicted_trajectory("Test", 0, 0)

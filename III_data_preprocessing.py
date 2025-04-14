@@ -33,7 +33,7 @@ def calculate_euclidean_distance(x_1, y_1, x_2, y_2):
     return np.sqrt((x_1 - x_2) ** 2 + (y_1 - y_2) ** 2)
 
 
-# -------- Data Preprocessing Pipeline -------- #
+# -------- Data Preprocessing -------- #
 
 def data_preprocessing(data):
     # sin-cos-transformations of "day"
