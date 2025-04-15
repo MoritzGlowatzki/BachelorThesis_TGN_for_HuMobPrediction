@@ -1,3 +1,5 @@
+from typing import Literal
+
 import seaborn as sns
 from matplotlib import pyplot as plt
 from matplotlib.colors import Normalize
@@ -5,7 +7,8 @@ from tqdm import tqdm
 
 from III_data_preprocessing import estimate_home_location, estimate_work_location
 from I_data_IO import *
-from trajectory_visualization import create_single_trajectory_gif, create_real_vs_predicted_trajectory_gif
+from trajectory_visualization import (create_single_trajectory_gif, create_combined_trajectory_gif,
+                                      create_single_trajectory_plot, create_combined_trajectory_plot)
 
 # -------- Preliminaries -------- #
 DATA_PATHS = {
@@ -132,16 +135,22 @@ def plot_gravitational_centres(dataset_index, uid):
     plt.show()
 
 
-def visualize_trajectory(dataset_index, uid, day):
+def visualize_single_trajectory(dataset_index, uid, day, mode: Literal["real", "pred"], animated: bool):
     data = load_csv_file(DATA_PATHS[dataset_index])
     filtered_data = data[(data["uid"] == uid) & (data["d"] == day)]
-    create_single_trajectory_gif(filtered_data)
+    if animated:
+        create_single_trajectory_gif(filtered_data, mode=mode)
+    else:
+        create_single_trajectory_plot(filtered_data, mode=mode)
 
 
-def visualize_real_and_predicted_trajectory(dataset_index, uid, day):
+def compare_real_and_predicted_trajectory(dataset_index, uid, day, animated: bool):
     data = load_csv_file(DATA_PATHS[dataset_index])
     filtered_data = data[(data["uid"] == uid) & (data["d"] == day)]
-    create_real_vs_predicted_trajectory_gif(filtered_data)
+    if animated:
+        create_combined_trajectory_gif(filtered_data)
+    else:
+        create_combined_trajectory_plot(filtered_data)
 
 
 if __name__ == "__main__":
@@ -149,5 +158,8 @@ if __name__ == "__main__":
     # for i in tqdm(range(0, 3), total=3):
     #     plot_gravitational_centres("A", i)
     # plot_gravitational_centres("A-small", 0)
-    # visualize_trajectory("A-small", 0, 0)
-    visualize_real_and_predicted_trajectory("Test", 0, 0)
+    for i in tqdm(range(0, 3), total=3):
+        visualize_single_trajectory("Test", 0, i, "real", True)
+        visualize_single_trajectory("Test", 0, i, "pred", False)
+        compare_real_and_predicted_trajectory("Test", 0, i, True)
+        compare_real_and_predicted_trajectory("Test", 0, i, False)
