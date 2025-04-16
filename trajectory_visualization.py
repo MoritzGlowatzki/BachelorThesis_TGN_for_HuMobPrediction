@@ -31,8 +31,8 @@ def create_grid_plot(min_x, max_x, min_y, max_y, nrows: int = 1, ncols: int = 1)
     plot_dimension_y = (max_y - min_y + 1) / 2
 
     # Calculate size per subplot (base values between 8 and 16 inches)
-    fig_width = max(8, min(16, plot_dimension_x)) * 0.75 * ncols
-    fig_height = max(8, min(16, plot_dimension_y)) * 0.75 * nrows
+    fig_width = max(8, min(16, plot_dimension_x)) * ncols
+    fig_height = max(8, min(16, plot_dimension_y)) * nrows
 
     figure, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(fig_width, fig_height))
 
@@ -68,7 +68,7 @@ def setup_time_text(ax):
 
 def create_and_safe_animation(fig, animate, path):
     anim = FuncAnimation(fig, animate, frames=NUM_FRAMES + 1, interval=500, repeat=False)
-    anim.save(path, writer="Pillow", dpi=100)
+    anim.save(path, writer="Pillow", dpi=80)
 
 
 # -------- Trajectory Visualization (GIF) -------- #
