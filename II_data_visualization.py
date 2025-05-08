@@ -3,6 +3,7 @@ from typing import Literal
 import seaborn as sns
 from matplotlib import pyplot as plt
 from matplotlib.colors import Normalize
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 from tqdm import tqdm
 
 from III_data_preprocessing import estimate_home_location, estimate_work_location
@@ -55,7 +56,7 @@ def plot_daily_data_records_per_city():
     plt.show()
 
 
-def plot_gravitational_centres(dataset_index, uid):
+def plot_gravitational_centres_for_single_user(dataset_index, uid):
     original_data = load_csv_file(DATA_PATHS[dataset_index])
     data = original_data[(original_data["uid"] == uid)][["x", "y", "t"]]
 
@@ -135,6 +136,47 @@ def plot_gravitational_centres(dataset_index, uid):
     plt.show()
 
 
+def plot_gravitational_centres_all_cities():
+    selected_cities = ["A", "B", "C", "D"]
+    fig, axes = plt.subplots(2, 2, figsize=(14, 12), constrained_layout=True)
+    fig.suptitle("Heatmaps of Log Data Counts per (x,y)-Coordinate", fontsize=24, fontweight="bold")
+
+    for ax, city_code in zip(axes.flat, selected_cities):
+        data = load_csv_file(DATA_PATHS[city_code])[["x", "y"]]
+
+        # Plot 2D histogram: note 'x' is row (vertical), 'y' is column (horizontal)
+        h = ax.hist2d(data["x"], data["y"], bins=[200, 200], cmap="viridis", norm="log")
+
+        # Format axes
+        ax.set_xlim(1, 200)
+        ax.set_ylim(1, 200)
+        ax.set_xlabel("X", fontsize=12)
+        ax.set_ylabel("Y", fontsize=12)
+        ax.set_title(f"City {city_code}", fontsize=16)
+        ax.set_xticks([1, 50, 100, 150, 200])
+        ax.set_yticks([1, 50, 100, 150, 200])
+        ax.set_aspect("equal")
+        ax.invert_yaxis()  # Invert the y-axis to place (0,0) at the top-left
+        ax.set_facecolor("#440154")
+
+        # Attach a properly sized colorbar
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="5%", pad=0.05)
+        cbar = fig.colorbar(h[3], cax=cax)
+        cbar.set_label("Log-scaled Counts")
+        if (city_code == "D"):
+            cbar.set_ticks([1, 10, 100, 1000, 10000])
+            cbar.set_ticklabels(["0", "10", "100", "1.000", "10.000"])
+        else:
+            cbar.set_ticks([1, 10, 100, 1000, 10000, 100000])
+            cbar.set_ticklabels(["0", "10", "100", "1.000", "10.000", "100.000"])
+        cbar.minorticks_off()
+
+    # Save and show
+    plt.savefig("./output/gravitational_centres_all_cities_original.png", dpi=300, bbox_inches="tight", pad_inches=0.5)
+    plt.show()
+
+
 def visualize_single_trajectory(dataset_index, uid, day, mode: Literal["real", "pred"], animated: bool):
     data = load_csv_file(DATA_PATHS[dataset_index])
     filtered_data = data[(data["uid"] == uid) & (data["d"] == day)]
@@ -157,9 +199,10 @@ if __name__ == "__main__":
     # plot_daily_data_records_per_city()
     # for i in tqdm(range(0, 3), total=3):
     #     plot_gravitational_centres("A", i)
-    # plot_gravitational_centres("A-small", 0)
-    for i in tqdm(range(0, 3), total=3):
-        visualize_single_trajectory("Test", 0, i, "real", True)
-        visualize_single_trajectory("Test", 0, i, "pred", False)
-        compare_real_and_predicted_trajectory("Test", 0, i, True)
-        compare_real_and_predicted_trajectory("Test", 0, i, False)
+    # plot_gravitational_centres_for_single_user("A-small", 0)
+    plot_gravitational_centres_all_cities()
+    # for i in tqdm(range(0, 3), total=3):
+    #     visualize_single_trajectory("Test", 0, i, "real", True)
+    #     visualize_single_trajectory("Test", 0, i, "pred", False)
+    #     compare_real_and_predicted_trajectory("Test", 0, i, True)
+    #     compare_real_and_predicted_trajectory("Test", 0, i, False)
