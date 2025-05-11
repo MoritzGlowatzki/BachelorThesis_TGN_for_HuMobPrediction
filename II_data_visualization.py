@@ -88,10 +88,10 @@ def plot_gravitational_centres_for_single_user(dataset_index, uid):
 
         filtered_data = data.copy()
         if show_home and not show_work:
-            filtered_data = filtered_data[((0 <= filtered_data["t"]) & (filtered_data["t"] <= 12))
-                                          | ((44 <= filtered_data["t"]) & (filtered_data["t"] < 48))]
+            filtered_data = filtered_data[((0 <= filtered_data["t"]) & (filtered_data["t"] <= 16))
+                                          | ((40 <= filtered_data["t"]) & (filtered_data["t"] < 48))]
         elif not show_home and show_work:
-            filtered_data = filtered_data[(18 <= filtered_data["t"]) & (filtered_data["t"] < 34)]
+            filtered_data = filtered_data[(18 <= filtered_data["t"]) & (filtered_data["t"] < 38)]
 
         # Plot the histplot with the color normalization
         sns.histplot(data=filtered_data, x="x", y="y", cmap="viridis", thresh=0, bins=100, ax=ax, cbar=True,
@@ -102,9 +102,10 @@ def plot_gravitational_centres_for_single_user(dataset_index, uid):
         sns.kdeplot(data=filtered_data, x="x", y="y", fill=True, cmap="viridis", thresh=0, bw_adjust=0.5, ax=ax,
                     common_norm=norm)
 
-        # -------- Highlight home and work location -------- #
+        # -------- Highlight home and work location only if data is available -------- #
         if show_home:
-            home_x, home_y = estimate_home_location(filtered_data)
+            home_estimate = estimate_home_location(data)
+            home_x, home_y = home_estimate["home_x"], home_estimate["home_y"]
             ax.scatter(home_x, home_y, color="orange", marker="x", s=75)
             ax.axvline(x=home_x, color="orange", linestyle="--", linewidth=1)
             ax.axhline(y=home_y, color="orange", linestyle="--", linewidth=1)
@@ -113,7 +114,8 @@ def plot_gravitational_centres_for_single_user(dataset_index, uid):
                     bbox=dict(facecolor="orange", alpha=0.85, edgecolor="orange", boxstyle="round,pad=0.15"))
 
         if show_work:
-            work_x, work_y = estimate_work_location(filtered_data)
+            work_estimate = estimate_work_location(data)
+            work_x, work_y = work_estimate["work_x"], work_estimate["work_y"]
             ax.scatter(work_x, work_y, color="orange", marker="x", s=75)
             ax.axvline(x=work_x, color="orange", linestyle="--", linewidth=1)
             ax.axhline(y=work_y, color="orange", linestyle="--", linewidth=1)
@@ -195,14 +197,30 @@ def compare_real_and_predicted_trajectory(dataset_index, uid, day, animated: boo
         create_combined_trajectory_plot(filtered_data)
 
 
+def histplot_single_user_data_records(dataset_index, uid):
+    data = load_csv_file(DATA_PATHS[dataset_index])
+    filtered_data = data[data["uid"] == uid]
+    sns.histplot(data=filtered_data, x="t", bins=48, kde=False)
+    plt.title(f"Data Records Distribution for UID {uid}")
+    plt.xlabel("Time Slot (t)")
+    plt.ylabel("Number of Records")
+    plt.xticks(range(0, 48, 4))
+    plt.grid(True)
+    plt.show()
+
 if __name__ == "__main__":
     # plot_daily_data_records_per_city()
     # for i in tqdm(range(0, 3), total=3):
-    #     plot_gravitational_centres("A", i)
-    # plot_gravitational_centres_for_single_user("A-small", 0)
-    plot_gravitational_centres_all_cities()
+    #     plot_gravitational_centres_for_single_user("A", i)
+    # plot_gravitational_centres_for_single_user("A", 14959)
+    # plot_gravitational_centres_for_single_user("A", 26176)
+    plot_gravitational_centres_for_single_user("A", 60369)
+    # plot_gravitational_centres_all_cities()
     # for i in tqdm(range(0, 3), total=3):
     #     visualize_single_trajectory("Test", 0, i, "real", True)
     #     visualize_single_trajectory("Test", 0, i, "pred", False)
     #     compare_real_and_predicted_trajectory("Test", 0, i, True)
     #     compare_real_and_predicted_trajectory("Test", 0, i, False)
+    # histplot_single_user_data_records("A", 14959)
+    # histplot_single_user_data_records("A", 26176)
+    # histplot_single_user_data_records("A", 60369)
