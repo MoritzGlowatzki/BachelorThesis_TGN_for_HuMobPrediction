@@ -6,7 +6,7 @@ from matplotlib.colors import Normalize
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from tqdm import tqdm
 
-from III_data_preprocessing import estimate_home_location, estimate_work_location
+from II_data_preprocessing import estimate_home_location, estimate_work_location
 from I_data_IO import *
 from trajectory_visualization import (create_single_trajectory_gif, create_combined_trajectory_gif,
                                       create_single_trajectory_plot, create_combined_trajectory_plot)

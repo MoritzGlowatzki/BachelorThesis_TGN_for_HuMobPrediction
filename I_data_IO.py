@@ -16,6 +16,3 @@ if __name__ == "__main__":
 
     # Filter only rows where uid == 0
     store_csv_file(RAW_SMALL_DATA_PATH, data[data["uid"] <= 1])
-
-    data_small = load_csv_file(RAW_SMALL_DATA_PATH)
-    print(data_small)

@@ -37,23 +37,18 @@ def estimate_work_location(df):
         "work_cell_id": calculate_cell_id({"x": coords[0], "y": coords[1]})
     }
 
-
 def calculate_cell_id(coordinate):
-    return int(coordinate["x"] + (coordinate["y"] - 1) * 200)
-
+    return int(coordinate["x"]) + (int(coordinate["y"]) - 1) * 200
 
 def calculate_average_number_of_movements_per_day(group):
     return group.groupby("d").size().mean()
 
-
 def calculate_average_travel_distance_per_day(group):
     return group.groupby("d")["distance_to_last_position"].sum().mean()
-
 
 def calculate_euclidean_distance(x1, y1, x2, y2):
     # helper function for calculating the euclidean distance
     return np.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
-
 
 def calculate_timedelta_since_last_movement(group):
     group = group.reset_index(drop=True)
@@ -68,7 +63,6 @@ def calculate_timedelta_since_last_movement(group):
     group["timedelta_since_last_movement"] = delta
     return group
 
-
 def calculate_timedelta_since_last_movement_fast(group):
     group = group.reset_index(drop=True)
 
@@ -79,7 +73,6 @@ def calculate_timedelta_since_last_movement_fast(group):
     # Get cumulative count within each movement
     group["timedelta_since_last_movement_fast"] = group.groupby(movement_id).cumcount()
     return group
-
 
 def calculate_timedelta_since_last_observation(group):
     group = group.reset_index(drop=True)
@@ -104,7 +97,6 @@ def calculate_timedelta_since_last_observation(group):
 
     group["timedelta_since_last_observation"] = timedelta
     return group
-
 
 def calculate_timedelta_since_last_observation_fast(group):
     group = group.reset_index(drop=True)
@@ -297,29 +289,20 @@ def data_preprocessing_static_graph(poi_data, user_data):
         .assign(total_POI_count=lambda df: df.drop(columns="cell_id").sum(axis=1).astype(int))
     )
 
-    # distance from home, distance from work -> must be calculated dynamically
-    # user_data["distance_from_home"] = calculate_euclidean_distance(user_data["x"], user_data["y"],
-    #                                                                estimated_home[estimated_home["uid"] == uid]["x"],
-    #                                                                estimated_home[estimated_home["uid"] == uid]["y"])
-    # user_data["distance_from_work"] = calculate_euclidean_distance(user_data["x"], user_data["y"],
-    #                                                                estimated_work[estimated_home["uid"] == uid]["x"],
-    #                                                                estimated_work[estimated_home["uid"] == uid]["y"])
-
     # average dwell time per cell
-    avg_dwell_time = (user_data
-    .groupby("uid", group_keys=False)
-    [["uid", "timedelta_since_last_movement_fast",
-      "cell_id"]]  # explicitly giving column names to hide DeprecationWarning
-    .apply(add_stay_id)
-    .assign(
-        stay_duration=lambda df: df.groupby(["uid", "stay_id"])["timedelta_since_last_movement_fast"]
-                                 .transform("max") + 1,
-        mean_stay_duration_per_user_per_cell=lambda df: df.groupby(["uid", "cell_id"])["stay_duration"]
-                                 .transform("mean"),
-        avg_dwell_time=lambda df: df.groupby("cell_id")["mean_stay_duration_per_user_per_cell"]
-                                 .transform("mean")
-    )[["cell_id", "avg_dwell_time"]]
+    avg_dwell_time = (
+        user_data
+        .groupby("uid", group_keys=False)
+        [["uid", "timedelta_since_last_movement_fast", "cell_id"]]
+        .apply(add_stay_id)
+        .groupby(["uid", "cell_id", "stay_id"], as_index=False)
+        .agg(mean_stay_duration_per_user_per_cell=("timedelta_since_last_movement_fast", "mean"))
+        .groupby("cell_id", as_index=False)
+        .agg(avg_dwell_time=("mean_stay_duration_per_user_per_cell", "mean"))
     )
+
+    duplicates = avg_dwell_time[avg_dwell_time.duplicated(subset="cell_id", keep=False)]
+    print("Duplicates after calculating avg_dwell_time:", duplicates)
 
     # normalized visitor count per cell
     visitor_count = (
@@ -344,42 +327,40 @@ def data_preprocessing_static_graph(poi_data, user_data):
 
 
 if __name__ == "__main__":
-    print("Load city data ... ")
+    for city_idx in ["A"]:  # "A", "B", "C", "D"
+        print(f"Currently processing city: {city_idx}")
 
-    RAW_USER_DATA_PATH = "./data/cityB-dataset.csv"
-    user_data = load_csv_file(RAW_USER_DATA_PATH)
+        print("Load city data ... ")
+        RAW_USER_DATA_PATH = f"./data/city{city_idx}-dataset.csv"
+        user_data = load_csv_file(RAW_USER_DATA_PATH)
+        print("Finished city data.")
 
-    print("Finish loading user data.")
+        # remove day 27 as advised in "YJMob100K: City-scale and longitudinal dataset of anonymized human mobility trajectories" (Yabe et al. 2024)
+        user_data = user_data[~(user_data["d"] == 26)]
 
-    # remove day 27 as advised in "YJMob100K: City-scale and longitudinal dataset of anonymized human mobility trajectories" (Yabe et al. 2024)
-    user_data = user_data[~(user_data["d"] == 26)]
+        # for the 2024 challenge only days 1 to 60 were known
+        if city_idx != "A":
+            user_data = user_data[user_data["d"] < 60]
 
-    # for the 2024 challenge only days 1 to 60 were known
-    user_data = user_data[user_data["d"] < 60]
+        print("Start processing trajectory data ... ")
+        preprocessed_trajectory_data = data_preprocessing_user_trajectories(user_data)
+        PREPROCESSED_TRAJECTORY_DATA_PATH = f"./data/city{city_idx}-trajectory-dataset-preprocessed.csv"
+        store_csv_file(PREPROCESSED_TRAJECTORY_DATA_PATH, preprocessed_trajectory_data)
+        print("Finished processing trajectory data.")
 
-    print("Start processing trajectory data ... ")
+        print("Load POI data ... ")
+        RAW_POI_DATA_PATH = f"./data/POIdata_city{city_idx}.csv"
+        poi_data = load_csv_file(RAW_POI_DATA_PATH)
+        print("Finish loading POI data.")
 
-    preprocessed_trajectory_data = data_preprocessing_user_trajectories(user_data)
-    PREPROCESSED_TRAJECTORY_DATA_PATH = "./data/cityB-trajectory-dataset-preprocessed.csv"
-    store_csv_file(PREPROCESSED_TRAJECTORY_DATA_PATH, preprocessed_trajectory_data)
+        print("Start processing user information data ... ")
+        preprocessed_user_data = data_preprocessing_user_info(preprocessed_trajectory_data)
+        PREPROCESSED_USER_DATA_PATH = f"./data/city{city_idx}-user-information-preprocessed.csv"
+        store_csv_file(PREPROCESSED_USER_DATA_PATH, preprocessed_user_data)
+        print("Finished processing user information data.")
 
-    print("Finished processing trajectory data.")
-    print("Load POI data ... ")
-
-    RAW_POI_DATA_PATH = "./data/POIdata_cityB.csv"
-    poi_data = load_csv_file(RAW_POI_DATA_PATH)
-
-    print("Start processing user information data ... ")
-
-    preprocessed_user_data = data_preprocessing_user_info(preprocessed_trajectory_data)
-    PREPROCESSED_USER_DATA_PATH = "./data/cityB-users-preprocessed.csv"
-    store_csv_file(PREPROCESSED_USER_DATA_PATH, preprocessed_user_data)
-
-    print("Finished processing user information data.")
-    print("Start processing static graph data ... ")
-
-    preprocessed_static_data = data_preprocessing_static_graph(poi_data, preprocessed_trajectory_data)
-    PREPROCESSED_STATIC_DATA_PATH = "./data/cityB-POIs-preprocessed.csv"
-    store_csv_file(PREPROCESSED_STATIC_DATA_PATH, preprocessed_static_data)
-
-    print("Finished processing static graph data.")
+        print("Start processing static graph data ... ")
+        preprocessed_static_data = data_preprocessing_static_graph(poi_data, preprocessed_trajectory_data)
+        PREPROCESSED_STATIC_DATA_PATH = f"./data/city{city_idx}-static-graph-preprocessed.csv"
+        store_csv_file(PREPROCESSED_STATIC_DATA_PATH, preprocessed_static_data)
+        print("Finished processing static graph data.")
