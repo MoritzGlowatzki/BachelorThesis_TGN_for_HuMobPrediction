@@ -1,5 +1,6 @@
 from typing import Literal
 
+import matplotlib.cm as cm
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
@@ -79,10 +80,10 @@ def create_single_trajectory_gif(df, mode: Literal["real", "pred"]):
     fig, axis = create_grid_plot(*find_min_max_coordinates(df, mode=mode))
 
     if mode == "real":
-        axis.set_title(label=f"Predicted Trajectory uid={UID} on day {DAY}", fontsize=21, fontweight="bold")
+        axis.set_title(label=f"Trajectory uid={UID} on day {DAY}", fontsize=21, fontweight="bold")
         color = "C0"
     else:
-        axis.set_title(label=f"Trajectory uid={UID} on day {DAY}", fontsize=21, fontweight="bold")
+        axis.set_title(label=f"Predicted Trajectory uid={UID} on day {DAY}", fontsize=21, fontweight="bold")
         color = "C1"
 
     # Plot elements
@@ -293,4 +294,30 @@ def create_combined_trajectory_plot(df):
     fig.suptitle(f"Trajectory Comparison uid={UID} on day {DAY}", fontsize=16, fontweight="bold")
     plt.tight_layout()
     plt.savefig(f"./output/comparison_trajectory_uid={UID}_day{DAY}.png")
+    plt.show()
+
+
+def create_multiday_trajectory_plot(df):
+    """
+    Create a combined trajectory plot over multiple days for a single user.
+    Real trajectories are shown with solid lines; predicted with dashed lines.
+    """
+    UID = df["uid"].iloc[0]
+    days = sorted(df["d"].unique())
+
+    fig, axis = create_grid_plot(*find_min_max_coordinates(df, mode="real"))
+
+    colors = cm.get_cmap("tab10", len(days))  # colormap with enough distinct colors
+
+    for i, day in enumerate(days):
+        df_day = df[df["d"] == day]
+
+        # Plot real trajectory
+        axis.plot(df_day["x"], df_day["y"], color=colors(i), linestyle='-', label=f"Day {day}")
+        axis.scatter(df_day["x"], df_day["y"], color=colors(i), s=10)
+
+    axis.legend(loc='best', fontsize='small')
+    fig.suptitle(f"Multi-day Trajectory for uid={UID}", fontsize=24, fontweight="bold")
+    plt.tight_layout()
+    plt.savefig(f"./output/multiday_trajectory_uid_{UID}.png")
     plt.show()

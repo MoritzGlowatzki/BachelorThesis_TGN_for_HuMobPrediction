@@ -9,16 +9,16 @@ from tqdm import tqdm
 from II_data_preprocessing import estimate_home_location, estimate_work_location
 from I_data_IO import *
 from trajectory_visualization import (create_single_trajectory_gif, create_combined_trajectory_gif,
-                                      create_single_trajectory_plot, create_combined_trajectory_plot)
+                                      create_single_trajectory_plot, create_combined_trajectory_plot,
+                                      create_multiday_trajectory_plot)
 
 # -------- Preliminaries -------- #
 DATA_PATHS = {
-    "A": "./data/cityA-dataset.csv",
-    "B": "./data/cityB-dataset.csv",
-    "C": "./data/cityC-dataset.csv",
-    "D": "./data/cityD-dataset.csv",
-    "A-small": "./data/cityA-dataset-small.csv",
-    "Test": "./data/cityA-test.csv"
+    "A": "./data/original/cityA-dataset.csv",
+    "B": "./data/original/cityB-dataset.csv",
+    "C": "./data/original/cityC-dataset.csv",
+    "D": "./data/original/cityD-dataset.csv",
+    "A-small": "./data/original/cityA-dataset-small.csv",
 }
 
 def plot_daily_data_records_per_city():
@@ -197,16 +197,11 @@ def compare_real_and_predicted_trajectory(dataset_index, uid, day, animated: boo
         create_combined_trajectory_plot(filtered_data)
 
 
-def histplot_single_user_data_records(dataset_index, uid):
+def visualize_multiday_user_trajectory(dataset_index, uid):
     data = load_csv_file(DATA_PATHS[dataset_index])
-    filtered_data = data[data["uid"] == uid]
-    sns.histplot(data=filtered_data, x="t", bins=48, kde=False)
-    plt.title(f"Data Records Distribution for UID {uid}")
-    plt.xlabel("Time Slot (t)")
-    plt.ylabel("Number of Records")
-    plt.xticks(range(0, 48, 4))
-    plt.grid(True)
-    plt.show()
+    filtered_data = data[(data["uid"] == uid)]
+    create_multiday_trajectory_plot(filtered_data)
+
 
 if __name__ == "__main__":
     # plot_daily_data_records_per_city()
@@ -214,13 +209,12 @@ if __name__ == "__main__":
     #     plot_gravitational_centres_for_single_user("A", i)
     # plot_gravitational_centres_for_single_user("A", 14959)
     # plot_gravitational_centres_for_single_user("A", 26176)
-    plot_gravitational_centres_for_single_user("A", 60369)
+    # plot_gravitational_centres_for_single_user("A", 60369)
     # plot_gravitational_centres_all_cities()
-    # for i in tqdm(range(0, 3), total=3):
-    #     visualize_single_trajectory("Test", 0, i, "real", True)
-    #     visualize_single_trajectory("Test", 0, i, "pred", False)
-    #     compare_real_and_predicted_trajectory("Test", 0, i, True)
-    #     compare_real_and_predicted_trajectory("Test", 0, i, False)
-    # histplot_single_user_data_records("A", 14959)
-    # histplot_single_user_data_records("A", 26176)
-    # histplot_single_user_data_records("A", 60369)
+    for i in tqdm(range(0, 3), total=3):
+        # visualize_single_trajectory("A-small", 0, i, "real", True)
+        visualize_single_trajectory("D", 0, i, "real", False)
+        # compare_real_and_predicted_trajectory("Test", 0, i, True)
+        # compare_real_and_predicted_trajectory("Test", 0, i, False)
+    # visualize_multiday_user_trajectory("B", 1)
+    # visualize_single_trajectory("B", 1, 0, "real", False)

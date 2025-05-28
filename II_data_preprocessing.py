@@ -71,7 +71,7 @@ def calculate_timedelta_since_last_movement_fast(group):
     movement_id = movement_detected.cumsum()
 
     # Get cumulative count within each movement
-    group["timedelta_since_last_movement_fast"] = group.groupby(movement_id).cumcount()
+    group["timedelta_since_last_movement"] = group.groupby(movement_id).cumcount()
     return group
 
 def calculate_timedelta_since_last_observation(group):
@@ -110,15 +110,13 @@ def calculate_timedelta_since_last_observation_fast(group):
         .fillna(first_record_idx)
     )
 
-    group["timedelta_since_last_observation_fast"] = group.index.to_numpy() - last_record_idx.to_numpy()
+    group["timedelta_since_last_observation"] = group.index.to_numpy() - last_record_idx.to_numpy()
     return group
-
 
 def add_stay_id(group):
     group = group.reset_index(drop=True)
     group["stay_id"] = (group["cell_id"] != group["cell_id"].shift()).cumsum() - 1
     return group
-
 
 def downcast_dataframe(df):
     # convert each column datatype to the smallest possible that can still hold all its values
@@ -158,18 +156,31 @@ def data_preprocessing_user_trajectories(user_data):
     traj_data_extended["is_recorded"] = (traj_data_extended["_merge"] == "both").astype(int)
     traj_data_extended.drop(columns=["_merge"], inplace=True)
 
+    # remove day 27 as advised in "YJMob100K: City-scale and longitudinal dataset of anonymized human mobility trajectories" (Yabe et al. 2024)
+    traj_data_extended = traj_data_extended[traj_data_extended["d"] != 26]
+
     # interpolate by using forward fill
     traj_data_extended[["x", "y"]] = traj_data_extended.groupby("uid")[["x", "y"]].ffill().bfill().astype(int)
 
     # calculate cell_id
     traj_data_extended["cell_id"] = ((traj_data_extended["x"] + (traj_data_extended["y"] - 1) * 200).astype(int))
 
+    # calculate timestamp
+    traj_data_extended["timestamp"] = (traj_data_extended["d"] * 48 + traj_data_extended["t"]).astype(int)
+
+    # Sine-cosine encoding of 'day' (0–6) and 'time' (0–47)
+    traj_data_extended["d_sin"] = np.sin(2 * np.pi * traj_data_extended["d"] / 7)
+    traj_data_extended["d_cos"] = np.cos(2 * np.pi * traj_data_extended["d"] / 7)
+    traj_data_extended["t_sin"] = np.sin(2 * np.pi * traj_data_extended["t"] / 48)
+    traj_data_extended["t_cos"] = np.cos(2 * np.pi * traj_data_extended["t"] / 48)
+
     # weekday
     traj_data_extended["weekday"] = traj_data_extended["d"] % 7
+    traj_data_extended = pd.get_dummies(traj_data_extended, columns=["weekday"], prefix="wd")
 
     # weekend
     traj_data_extended["weekend"] = (
-            (traj_data_extended["weekday"] == 0) | (traj_data_extended["weekday"] == 6))
+            (traj_data_extended["wd_0"] == 1) | (traj_data_extended["wd_6"] == 1))
 
     # daytime: 1, nighttime: 0 (= time between 7am and 7pm)
     traj_data_extended["daytime"] = ((14 <= traj_data_extended["t"]) & (traj_data_extended["t"] < 38))
@@ -180,7 +191,7 @@ def data_preprocessing_user_trajectories(user_data):
         # group = calculate_timedelta_since_last_movement(group)
         group = calculate_timedelta_since_last_movement_fast(group)
         # group = calculate_timedelta_since_last_observation(group)
-        group = calculate_timedelta_since_last_observation_fast(group)
+        # group = calculate_timedelta_since_last_observation_fast(group)
 
         # distance from estimated home location
         home = estimate_home_location(group)
@@ -221,8 +232,7 @@ def data_preprocessing_user_trajectories(user_data):
         "position_flag"] = 1
 
     # drop home_x, home_y, work_x and work_y
-    traj_data_extended.drop(columns=["home_x", "home_y"], inplace=True)
-    traj_data_extended.drop(columns=["work_x", "work_y"], inplace=True)
+    traj_data_extended.drop(columns=["home_x", "home_y", "work_x", "work_y"], inplace=True)
 
     # Cast all columns except "distance_to_last_position", "distance_from_home", "distance_from_work" to int
     cols_to_int = traj_data_extended.columns.difference(
@@ -293,16 +303,13 @@ def data_preprocessing_static_graph(poi_data, user_data):
     avg_dwell_time = (
         user_data
         .groupby("uid", group_keys=False)
-        [["uid", "timedelta_since_last_movement_fast", "cell_id"]]
+        [["uid", "timedelta_since_last_movement", "cell_id"]]
         .apply(add_stay_id)
         .groupby(["uid", "cell_id", "stay_id"], as_index=False)
-        .agg(mean_stay_duration_per_user_per_cell=("timedelta_since_last_movement_fast", "mean"))
+        .agg(mean_stay_duration_per_user_per_cell=("timedelta_since_last_movement", "mean"))
         .groupby("cell_id", as_index=False)
         .agg(avg_dwell_time=("mean_stay_duration_per_user_per_cell", "mean"))
     )
-
-    duplicates = avg_dwell_time[avg_dwell_time.duplicated(subset="cell_id", keep=False)]
-    print("Duplicates after calculating avg_dwell_time:", duplicates)
 
     # normalized visitor count per cell
     visitor_count = (
@@ -327,16 +334,13 @@ def data_preprocessing_static_graph(poi_data, user_data):
 
 
 if __name__ == "__main__":
-    for city_idx in ["A"]:  # "A", "B", "C", "D"
+    for city_idx in ["D"]:  # "A", "B", "C", "D"
         print(f"Currently processing city: {city_idx}")
 
         print("Load city data ... ")
-        RAW_USER_DATA_PATH = f"./data/city{city_idx}-dataset.csv"
+        RAW_USER_DATA_PATH = f"./data/original/city{city_idx}-dataset.csv"
         user_data = load_csv_file(RAW_USER_DATA_PATH)
-        print("Finished city data.")
-
-        # remove day 27 as advised in "YJMob100K: City-scale and longitudinal dataset of anonymized human mobility trajectories" (Yabe et al. 2024)
-        user_data = user_data[~(user_data["d"] == 26)]
+        print("Finished loading city data.")
 
         # for the 2024 challenge only days 1 to 60 were known
         if city_idx != "A":
@@ -344,23 +348,23 @@ if __name__ == "__main__":
 
         print("Start processing trajectory data ... ")
         preprocessed_trajectory_data = data_preprocessing_user_trajectories(user_data)
-        PREPROCESSED_TRAJECTORY_DATA_PATH = f"./data/city{city_idx}-trajectory-dataset-preprocessed.csv"
+        PREPROCESSED_TRAJECTORY_DATA_PATH = f"./data/raw/city{city_idx}-trajectory-dataset-preprocessed.csv"
         store_csv_file(PREPROCESSED_TRAJECTORY_DATA_PATH, preprocessed_trajectory_data)
         print("Finished processing trajectory data.")
 
         print("Load POI data ... ")
-        RAW_POI_DATA_PATH = f"./data/POIdata_city{city_idx}.csv"
+        RAW_POI_DATA_PATH = f"./data/original/POIdata_city{city_idx}.csv"
         poi_data = load_csv_file(RAW_POI_DATA_PATH)
         print("Finish loading POI data.")
 
         print("Start processing user information data ... ")
         preprocessed_user_data = data_preprocessing_user_info(preprocessed_trajectory_data)
-        PREPROCESSED_USER_DATA_PATH = f"./data/city{city_idx}-user-information-preprocessed.csv"
+        PREPROCESSED_USER_DATA_PATH = f"./data/raw/city{city_idx}-user-information-preprocessed.csv"
         store_csv_file(PREPROCESSED_USER_DATA_PATH, preprocessed_user_data)
         print("Finished processing user information data.")
 
         print("Start processing static graph data ... ")
         preprocessed_static_data = data_preprocessing_static_graph(poi_data, preprocessed_trajectory_data)
-        PREPROCESSED_STATIC_DATA_PATH = f"./data/city{city_idx}-static-graph-preprocessed.csv"
+        PREPROCESSED_STATIC_DATA_PATH = f"./data/raw/city{city_idx}-static-graph-preprocessed.csv"
         store_csv_file(PREPROCESSED_STATIC_DATA_PATH, preprocessed_static_data)
         print("Finished processing static graph data.")

@@ -1,7 +1,7 @@
 import pandas as pd
 
-RAW_DATA_PATH = "./data/cityA-dataset.csv"
-RAW_SMALL_DATA_PATH = "./data/cityA-dataset-small.csv"
+RAW_DATA_PATH = "./data/original/cityA-dataset.csv"
+RAW_SMALL_DATA_PATH = "./data/original/cityA-dataset-small.csv"
 
 def load_csv_file(path):
     return pd.read_csv(path)
