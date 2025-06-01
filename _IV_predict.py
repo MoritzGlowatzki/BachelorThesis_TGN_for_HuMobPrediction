@@ -1,8 +1,8 @@
 import pandas as pd
 import torch
 
-from III_model_training import TGNModel
-from II_b_dataset import UserLocationInteractionDataset
+from _III_model_training import TGNModel
+from _II_b_dataset import UserLocationInteractionDataset
 
 # 1) DEVICE CONFIGURATION
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
