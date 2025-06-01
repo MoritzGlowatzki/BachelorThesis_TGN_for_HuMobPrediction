@@ -131,7 +131,7 @@ class TGNModel(torch.nn.Module):
                      data.msg[e_id].to(self.device))
         return z
 
-    def predict_scores(self, z, src, dst, neg_dst=None, neg_ratio=2.0):
+    def predict_scores(self, z, src, dst, neg_dst=None, neg_ratio=1.0):
         # Positive score
         pos_out = self.link_pred(z[self.assoc[src]], z[self.assoc[dst]])
         # Negative score (if neg_dst provided)
@@ -256,11 +256,13 @@ if __name__ == '__main__':
     dataset = UserLocationInteractionDataset(root="data", city_idx="D")
     data = dataset[0].to(device)
 
+    neg_sampling_ratio = 1.0
+
     # Split data and initialize data loaders
     train_data, val_data, test_data = data.train_val_test_split(val_ratio=0.15, test_ratio=0.15)
-    train_loader = TemporalDataLoader(train_data, batch_size=200, neg_sampling_ratio=2.0)
-    val_loader = TemporalDataLoader(val_data, batch_size=200, neg_sampling_ratio=2.0)
-    test_loader = TemporalDataLoader(test_data, batch_size=200, neg_sampling_ratio=2.0)
+    train_loader = TemporalDataLoader(train_data, batch_size=200, neg_sampling_ratio=neg_sampling_ratio)
+    val_loader = TemporalDataLoader(val_data, batch_size=200, neg_sampling_ratio=neg_sampling_ratio)
+    test_loader = TemporalDataLoader(test_data, batch_size=200, neg_sampling_ratio=neg_sampling_ratio)
 
     # Instantiate TGNModel
     model = TGNModel(
