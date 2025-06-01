@@ -241,7 +241,6 @@ def data_preprocessing_user_trajectories(user_data):
 
     return downcast_dataframe(traj_data_extended)
 
-
 def data_preprocessing_user_info(user_data):
     user_info = user_data.copy()
 
@@ -269,7 +268,6 @@ def data_preprocessing_user_info(user_data):
     result[cols_to_int] = result[cols_to_int].astype(int)
 
     return downcast_dataframe(result)
-
 
 def data_preprocessing_static_graph(poi_data, user_data):
     poi_data = poi_data.copy()
@@ -333,14 +331,29 @@ def data_preprocessing_static_graph(poi_data, user_data):
     return downcast_dataframe(merged)
 
 
+# -------- Data Checks -------- #
+
+def check_for_new_cells_after_day_60(df, city_idx):
+    visited_before = set(map(tuple, df.loc[df["d"] < 60, ["x", "y"]].values))
+    visited_after = set(map(tuple, df.loc[df["d"] >= 60, ["x", "y"]].values))
+    new_cells_after_60 = visited_after.difference(visited_before)
+    total_visited = df.drop_duplicates(subset=["x", "y"]).shape[0]
+    if new_cells_after_60:
+        print(
+            f"{len(new_cells_after_60)} out of {total_visited} cells in city {city_idx} visited after day 60 were new (not seen before).")
+    else:
+        print(f"No new cells visited in city {city_idx} after day 60 — all were already seen before.")
+
 if __name__ == "__main__":
-    for city_idx in ["D"]:  # "A", "B", "C", "D"
+    for city_idx in ["B", "C", "D"]:  # "A", "B", "C", "D"
         print(f"Currently processing city: {city_idx}")
 
         print("Load city data ... ")
-        RAW_USER_DATA_PATH = f"./data/original/city{city_idx}-dataset.csv"
-        user_data = load_csv_file(RAW_USER_DATA_PATH)
+        RAW_CITY_DATA_PATH = f"./data/original/city{city_idx}-dataset.csv"
+        user_data = load_csv_file(RAW_CITY_DATA_PATH)
         print("Finished loading city data.")
+
+        # check_for_new_cells_after_day_60(user_data, city_idx)
 
         # for the 2024 challenge only days 1 to 60 were known
         if city_idx != "A":

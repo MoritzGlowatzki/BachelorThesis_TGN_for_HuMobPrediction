@@ -6,11 +6,11 @@ from matplotlib.colors import Normalize
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from tqdm import tqdm
 
-from II_data_preprocessing import estimate_home_location, estimate_work_location
+from II_a_data_preprocessing import estimate_home_location, estimate_work_location
 from I_data_IO import *
-from trajectory_visualization import (create_single_trajectory_gif, create_combined_trajectory_gif,
-                                      create_single_trajectory_plot, create_combined_trajectory_plot,
-                                      create_multiday_trajectory_plot)
+from visualize_trajectory import (create_single_trajectory_gif, create_combined_trajectory_gif,
+                                  create_single_trajectory_plot, create_combined_trajectory_plot,
+                                  create_multiday_trajectory_plot)
 
 # -------- Preliminaries -------- #
 DATA_PATHS = {
@@ -210,10 +210,10 @@ if __name__ == "__main__":
     # plot_gravitational_centres_for_single_user("A", 14959)
     # plot_gravitational_centres_for_single_user("A", 26176)
     # plot_gravitational_centres_for_single_user("A", 60369)
-    # plot_gravitational_centres_all_cities()
-    for i in tqdm(range(0, 3), total=3):
+    plot_gravitational_centres_all_cities()
+    # for i in tqdm(range(0, 3), total=3):
         # visualize_single_trajectory("A-small", 0, i, "real", True)
-        visualize_single_trajectory("D", 0, i, "real", False)
+    # visualize_single_trajectory("D", 0, i, "real", False)
         # compare_real_and_predicted_trajectory("Test", 0, i, True)
         # compare_real_and_predicted_trajectory("Test", 0, i, False)
     # visualize_multiday_user_trajectory("B", 1)
