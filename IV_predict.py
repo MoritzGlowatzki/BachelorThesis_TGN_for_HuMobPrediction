@@ -42,11 +42,6 @@ for i in range(data.num_events):
 
     # Insert into LastNeighborLoader (keeps a rolling window)
     model.neighbor_loader.insert(src_i, dst_i)
-    # Update the memory module so memory(src_i) and memory(dst_i) reflect this event
-    # model.memory.update_state(src_i, dst_i, t_i, msg_i)
-
-
-# model.eval()  # ensure eval mode
 
 # 6) PREDICT FUNCTION (using memory‐only embeddings, no GNN)
 @torch.no_grad()
