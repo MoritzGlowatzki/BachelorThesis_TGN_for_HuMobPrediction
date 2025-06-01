@@ -11,7 +11,8 @@ print(f"Inference running on device: {device}")
 # 2) LOAD DATA (and move it onto `device`)
 dataset = UserLocationInteractionDataset(root="data", city_idx="D")
 data = dataset[0].to(device)
-# Now data.src, data.dst, data.t, data.msg are all on the same device.
+num_users = int(torch.max(data.src).item()) + 1
+print(f"Number of users: {num_users}")
 
 # 3) RE-INSTANTIATE MODEL (matching training hyperparameters)
 model = TGNModel(
@@ -42,13 +43,14 @@ for i in range(data.num_events):
     # Insert into LastNeighborLoader (keeps a rolling window)
     model.neighbor_loader.insert(src_i, dst_i)
     # Update the memory module so memory(src_i) and memory(dst_i) reflect this event
-    model.memory.update_state(src_i, dst_i, t_i, msg_i)
+    # model.memory.update_state(src_i, dst_i, t_i, msg_i)
 
-model.eval()  # ensure eval mode
+
+# model.eval()  # ensure eval mode
 
 # 6) PREDICT FUNCTION (using memory‐only embeddings, no GNN)
 @torch.no_grad()
-def predict_next_location(user_id: int, model: TGNModel, data, top_k: int = 5):
+def predict_next_location(user_id, model, data, top_k=5):
     """
     For a given user_id, return top_k location IDs + their scores, using:
       - user embedding = model.memory(user_id)
@@ -86,51 +88,48 @@ def predict_next_location(user_id: int, model: TGNModel, data, top_k: int = 5):
 
 
 # 7) AUTOREGRESSIVE INFERENCE LOOP (simulate next 720 timestamps)
-user_id = 0
 t0 = data.t.max().item()
-future_predictions = {}
+future_predictions = []  # switch to a list of dicts for (user_id, timestamp) pairs
 
 for dt in range(1, 2):  # 721
     pred_time = t0 + dt
 
-    # 7.1) Predict next location(s) for user_id at time = t0 + dt
-    locs, scores = predict_next_location(user_id, model, data, top_k=5)
-    top_loc = locs[0]  # scalar tensor on device
-    top_score = scores[0]  # scalar tensor on device
+    # ─── Loop over every user ───
+    for user_id in range(num_users):
+        # 7.1) Predict next location(s) for this user_id at time = t0 + dt
+        locs, scores = predict_next_location(user_id, model, data, top_k=5)
+        top_loc = locs[0]  # scalar tensor on device
+        top_score = scores[0]  # scalar tensor on device
 
-    # 7.2) Record them (move to CPU for storage)
-    future_predictions[pred_time] = {
-        "user_id": user_id,
-        "locations": locs.cpu().tolist(),
-        "scores": scores.cpu().tolist()
-    }
+        # 7.2) Record them (move to CPU for storage)
+        future_predictions.append({
+            "user_id": user_id,
+            "timestamp": pred_time,
+            "locations": locs.cpu().tolist(),
+            "scores": scores.cpu().tolist()
+        })
 
-    # 7.3) Feed top‐1 back into TGN so memory & neighbor history update
-    pred_user_tensor = torch.tensor([user_id], dtype=torch.long, device=device)  # [1]
-    pred_loc_tensor = top_loc.unsqueeze(0)  # [1], already on device
-    pred_time_tensor = torch.tensor([pred_time], dtype=torch.long, device=device)  # [1]
+        # 7.3) Feed top‐1 back into TGN so memory & neighbor history update
+        pred_user_tensor = torch.tensor([user_id], dtype=torch.long, device=device)  # [1]
+        pred_loc_tensor = top_loc.unsqueeze(0)  # [1], already on device
+        pred_time_tensor = torch.tensor([pred_time], dtype=torch.long, device=device)  # [1]
 
-    # If no “real” message feature exists for a future check‐in, use a zero‐vector
-    fake_msg = torch.zeros((1, data.msg.size(-1)), device=device)  # [1, msg_dim]
+        # If no “real” message feature exists for a future check‐in, use a zero‐vector
+        fake_msg = torch.zeros((1, data.msg.size(-1)), device=device)  # [1, msg_dim]
 
-    model.update_states(pred_user_tensor, pred_loc_tensor, pred_time_tensor, fake_msg)
+        model.update_states(pred_user_tensor, pred_loc_tensor, pred_time_tensor, fake_msg)
 
-# 8) PRINT THE FIRST 25 PREDICTIONS FOR SANITY CHECK
-for ts in list(future_predictions.keys())[:25]:
-    loc_list = future_predictions[ts]["locations"]
-    score_list = future_predictions[ts]["scores"]
-    print(f"t={ts:4d} → locs={loc_list}  scores={score_list}")
-
-# 9) SAVE TOP‐1 PER TIMESTAMP INTO CSV
+# 8) SAVE TOP‐1 PER (user, timestamp) INTO CSV
 rows = []
-for ts, pred in future_predictions.items():
+for pred in future_predictions:
     rows.append({
         "user_id": pred["user_id"],
-        "timestamp": ts,
+        "timestamp": pred["timestamp"],
         "predicted_location": pred["locations"][0],
         "score": pred["scores"][0]
     })
 
-df_out = pd.DataFrame(rows)
-df_out.to_csv("./prediction/top_predictions.csv", index=False)
+df = pd.DataFrame(rows)
+df.to_csv("./prediction/top_predictions.csv", index=False)
 print("Top predictions saved!")
+print(df.head(10))
