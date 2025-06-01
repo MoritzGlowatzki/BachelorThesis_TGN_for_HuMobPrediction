@@ -119,7 +119,7 @@ for dt in range(1, 2):  # 721
 
         model.update_states(pred_user_tensor, pred_loc_tensor, pred_time_tensor, fake_msg)
 
-# 8) SAVE TOP‐1 PER (user, timestamp) INTO CSV
+# 8) SAVE TOP‐PREDICTION PER (user, timestamp) INTO CSV
 rows = []
 for pred in future_predictions:
     rows.append({
