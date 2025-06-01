@@ -110,6 +110,7 @@ for dt in range(1, 2):  # 721
         pred_time_tensor = torch.tensor([pred_time], dtype=torch.long, device=device)  # [1]
 
         # If no “real” message feature exists for a future check‐in, use a zero‐vector
+        # TODO: real message feature
         fake_msg = torch.zeros((1, data.msg.size(-1)), device=device)  # [1, msg_dim]
 
         model.update_states(pred_user_tensor, pred_loc_tensor, pred_time_tensor, fake_msg)

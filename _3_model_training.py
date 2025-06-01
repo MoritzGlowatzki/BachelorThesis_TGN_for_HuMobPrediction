@@ -85,7 +85,7 @@ class TGNModel(torch.nn.Module):
         super().__init__()
         self.device = device
         # Keeps track of most recent neighbors for each node
-        # TODO: How to pick the neighbours of the location nodes? How to choose "size"?
+        # TODO: How to pick the neighbours of the location nodes? How to choose "size"? Optional: add state_dict
         self.neighbor_loader = LastNeighborLoader(num_nodes, size=neighbor_size, device=device)
 
         # TGNMemory stores a memory vector for each node
