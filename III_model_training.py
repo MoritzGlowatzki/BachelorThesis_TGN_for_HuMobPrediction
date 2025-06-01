@@ -85,6 +85,7 @@ class TGNModel(torch.nn.Module):
         super().__init__()
         self.device = device
         # Keeps track of most recent neighbors for each node
+        # TODO: How to pick the neighbours of the location nodes? How to choose "size"?
         self.neighbor_loader = LastNeighborLoader(num_nodes, size=neighbor_size, device=device)
 
         # TGNMemory stores a memory vector for each node
@@ -93,7 +94,9 @@ class TGNModel(torch.nn.Module):
             msg_dim,
             memory_dim,
             time_dim,
+            # TODO: learned message function?
             message_module=IdentityMessage(msg_dim, memory_dim, time_dim),
+            # TODO: learned message aggregation function?
             aggregator_module=MeanAggregator(),
         ).to(device)
 
@@ -258,6 +261,7 @@ if __name__ == '__main__':
 
     # Split data and initialize data loaders
     train_data, val_data, test_data = data.train_val_test_split(val_ratio=0.15, test_ratio=0.15)
+    # TODO: stratified negative sampling?? How to choose batch "size"?
     train_loader = TemporalDataLoader(train_data, batch_size=200, neg_sampling_ratio=neg_sampling_ratio)
     val_loader = TemporalDataLoader(val_data, batch_size=200, neg_sampling_ratio=neg_sampling_ratio)
     test_loader = TemporalDataLoader(test_data, batch_size=200, neg_sampling_ratio=neg_sampling_ratio)
