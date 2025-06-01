@@ -171,21 +171,20 @@ def train_epoch(model, train_loader, data, optimizer, criterion, epoch, writer=N
 
         # Step 2: Score positive and negative edges
         pos_out, neg_out = model.predict_scores(
-            z, batch.src, batch.dst, batch.neg_dst, train_loader.neg_sampling_ratio
-        )
+            z, batch.src, batch.dst, batch.neg_dst, train_loader.neg_sampling_ratio)
 
         # Step 3: Compute loss: positives → label 1, negatives → label 0
         loss = criterion(pos_out, torch.ones_like(pos_out))
         loss += criterion(neg_out, torch.zeros_like(neg_out))
 
-        # Step 4: Update memory and neighbor history before backprop
+        # Step 4: Update memory and neighbor history before backpropagation
         model.update_states(batch.src, batch.dst, batch.t, batch.msg)
 
         # Step 5: Backpropagate and optimize
+        optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        # Detach memory to prevent backpropagation through history
-        model.detach_memory()
+        model.detach_memory()  # Clear computation history so that past states aren’t tracked across batches
 
         # Accumulate total loss (weighted by number of events)
         total_loss += float(loss) * batch.num_events
@@ -219,8 +218,7 @@ def evaluate(model, loader, data, epoch, split, writer=None):
 
             # Compute scores
             pos_out, neg_out = model.predict_scores(
-                z, batch.src, batch.dst, batch.neg_dst, loader.neg_sampling_ratio
-            )
+                z, batch.src, batch.dst, batch.neg_dst, loader.neg_sampling_ratio)
 
             # Concatenate predictions and labels
             y_pred = torch.cat([pos_out, neg_out], dim=0).sigmoid().cpu()
@@ -250,7 +248,7 @@ def evaluate(model, loader, data, epoch, split, writer=None):
 if __name__ == '__main__':
     # Device configuration
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"Device configuration set to {device}")
+    print(f"Model training on device: {device}")
 
     # Load temporal interaction dataset
     dataset = UserLocationInteractionDataset(root="data", city_idx="D")
