@@ -11,6 +11,7 @@ print(f"Inference running on device: {device}")
 # 2) LOAD DATA (and move it onto `device`)
 dataset = UserLocationInteractionDataset(root="data", city_idx="D")
 data = dataset[0].to(device)
+# Now data.src, data.dst, data.t, data.msg are all on the same device.
 
 # 3) RE-INSTANTIATE MODEL (matching training hyperparameters)
 model = TGNModel(
@@ -30,6 +31,7 @@ model.gnn.load_state_dict(checkpoint["gnn_state"])
 model.link_pred.load_state_dict(checkpoint["pred_state"])
 
 # 5) REBUILD FINAL MEMORY & NEIGHBOR STATE FROM HISTORICAL EVENTS
+model.eval()
 for i in range(data.num_events):
     # Extract the i-th interaction (already on `device`)
     src_i = data.src[i].unsqueeze(0)  # shape [1]
@@ -43,7 +45,6 @@ for i in range(data.num_events):
     model.memory.update_state(src_i, dst_i, t_i, msg_i)
 
 model.eval()  # ensure eval mode
-
 
 # 6) PREDICT FUNCTION (using memory‐only embeddings, no GNN)
 @torch.no_grad()
@@ -59,8 +60,13 @@ def predict_next_location(user_id: int, model: TGNModel, data, top_k: int = 5):
     user_id_tensor = torch.tensor([user_id], dtype=torch.long, device=device)  # [1]
     z_user_mem, _ = model.memory(user_id_tensor)  # [1, memory_dim]
 
-    # (b) build candidate_locations: all location‐node IDs (users = [0..num_users−1], locations = [num_users..num_nodes−1])
-    candidate_locations = torch.arange(dataset.num_users, data.num_nodes, device=device)  # [num_locations]
+    # (b) build candidate_locations: all location‐node IDs
+    #     (assumes users = [0..num_users−1], locations = [num_users..num_nodes−1])
+    candidate_locations = torch.arange(
+        dataset.num_users,
+        data.num_nodes,
+        device=device
+    )  # [num_locations]
 
     # (c) get memory embeddings for all candidate locations in one go
     loc_ids = candidate_locations.unsqueeze(1)  # [num_locations, 1]
@@ -84,7 +90,7 @@ user_id = 0
 t0 = data.t.max().item()
 future_predictions = {}
 
-for dt in range(1, 721):
+for dt in range(1, 2):  # 721
     pred_time = t0 + dt
 
     # 7.1) Predict next location(s) for user_id at time = t0 + dt
@@ -94,6 +100,7 @@ for dt in range(1, 721):
 
     # 7.2) Record them (move to CPU for storage)
     future_predictions[pred_time] = {
+        "user_id": user_id,
         "locations": locs.cpu().tolist(),
         "scores": scores.cpu().tolist()
     }
@@ -118,6 +125,7 @@ for ts in list(future_predictions.keys())[:25]:
 rows = []
 for ts, pred in future_predictions.items():
     rows.append({
+        "user_id": pred["user_id"],
         "timestamp": ts,
         "predicted_location": pred["locations"][0],
         "score": pred["scores"][0]
