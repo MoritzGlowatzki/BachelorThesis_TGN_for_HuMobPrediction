@@ -7,7 +7,7 @@ from torch_geometric.loader import TemporalDataLoader
 from torch_geometric.nn import TGNMemory, TransformerConv
 from torch_geometric.nn.models.tgn import IdentityMessage, LastNeighborLoader, MeanAggregator
 
-from _II_b_dataset import UserLocationInteractionDataset
+from _02_b_dataset import UserLocationInteractionDataset
 
 
 # -------- Auxiliary modules -------- #

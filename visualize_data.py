@@ -6,8 +6,8 @@ from matplotlib.colors import Normalize
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from tqdm import tqdm
 
-from _II_a_data_preprocessing import estimate_home_location, estimate_work_location
-from _I_data_IO import *
+from _01_data_IO import *
+from _02_a_data_preprocessing import estimate_home_location, estimate_work_location
 from visualize_trajectory import (create_single_trajectory_gif, create_combined_trajectory_gif,
                                   create_single_trajectory_plot, create_combined_trajectory_plot,
                                   create_multiday_trajectory_plot)
