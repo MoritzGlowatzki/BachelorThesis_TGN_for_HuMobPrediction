@@ -7,8 +7,19 @@ from _1_data_IO import *
 # -------- Estimations, Calculations, Helper Functions -------- #
 
 def estimate_home_location(df):
-    # estimated home = most frequent location from 8 PM to 8 AM (t in [0–16] and [40–48])
-    filtered_df = df[((0 <= df["t"]) & (df["t"] <= 16)) | ((40 <= df["t"]) & (df["t"] < 48))]
+    # estimated home = most frequent location on weekends and from 8 PM to 8 AM on weekdays (t in [0–16] and [40–48])
+    df = df.copy()
+    df["weekday"] = df["d"] % 7
+    filtered_df = df[
+        (
+                ((1 <= df["weekday"]) & (df["weekday"] <= 5)) &  # Weekdays: 1–5
+                (
+                        ((0 <= df["t"]) & (df["t"] <= 16)) |  # 00:00–08:00
+                        ((40 <= df["t"]) & (df["t"] < 48))  # 20:00–24:00
+                )
+        ) |
+        ((df["weekday"] == 0) | (df["weekday"] == 6))  # Weekend: Sunday (0) & Saturday (6)
+        ]
 
     if not filtered_df.empty:
         coords = filtered_df.groupby(["x", "y"]).size().idxmax()
@@ -22,8 +33,13 @@ def estimate_home_location(df):
     }
 
 def estimate_work_location(df):
-    # estimated work = most frequent location from 9 AM to 7 PM (t in [18–38])
-    filtered_df = df[(18 <= df["t"]) & (df["t"] < 38)]
+    # estimated work = most frequent location from 9 AM to 5 PM only on weekdays (t in [18–34])
+    df = df.copy()
+    df["weekday"] = df["d"] % 7
+    filtered_df = df[
+        ((1 <= df["weekday"]) & (df["weekday"] <= 5)) &
+        ((18 <= df["t"]) & (df["t"] < 34))
+        ]
 
     if not filtered_df.empty:
         coords = filtered_df.groupby(["x", "y"]).size().idxmax()
@@ -120,16 +136,18 @@ def add_stay_id(group):
 
 def downcast_dataframe(df):
     # convert each column datatype to the smallest possible that can still hold all its values
-    for col in df.select_dtypes(include=["int", "int64"]).columns:
-        df[col] = pd.to_numeric(df[col], downcast="integer")
-    for col in df.select_dtypes(include=["float", "float64"]).columns:
-        df[col] = pd.to_numeric(df[col], downcast="float")
+    for col in tqdm(df.columns, desc="Downcasting columns"):
+        dtype = df[col].dtype
+        if pd.api.types.is_integer_dtype(dtype):
+            df[col] = pd.to_numeric(df[col], downcast="integer")
+        elif pd.api.types.is_float_dtype(dtype):
+            df[col] = pd.to_numeric(df[col], downcast="float")
     return df
 
 # -------- Data Preprocessing -------- #
 
-def data_preprocessing_user_trajectories(user_data):
-    traj_data = user_data.copy()
+def data_preprocessing_trajectory_data(city_data):
+    traj_data = city_data.copy()
 
     # determine the number of unique users, days, and timestamps in the dataset
     num_users = traj_data["uid"].nunique()
@@ -241,11 +259,12 @@ def data_preprocessing_user_trajectories(user_data):
 
     return downcast_dataframe(traj_data_extended)
 
-def data_preprocessing_user_info(user_data):
-    user_info = user_data.copy()
+
+def data_preprocessing_user_data(traj_data):
+    user_data = traj_data.copy()
 
     stats = []
-    for uid, group in tqdm(user_info.groupby("uid"), desc="Calculating user stats"):
+    for uid, group in tqdm(user_data.groupby("uid"), desc="Calculating user stats"):
         home = estimate_home_location(group)
         work = estimate_work_location(group)
         stats.append({
@@ -263,19 +282,20 @@ def data_preprocessing_user_info(user_data):
     # build the DataFrame
     result = pd.DataFrame(stats)
 
-    # Cast all columns except "average_movements_per_day" and "average_travel_distance_per_day" to int
+    # cast all columns except "average_movements_per_day" and "average_travel_distance_per_day" to int
     cols_to_int = result.columns.difference(["average_movements_per_day", "average_travel_distance_per_day"])
     result[cols_to_int] = result[cols_to_int].astype(int)
 
     return downcast_dataframe(result)
 
-def data_preprocessing_static_graph(poi_data, user_data):
+
+def data_preprocessing_location_data(poi_data, traj_data):
     poi_data = poi_data.copy()
-    user_data = user_data.copy()
+    traj_data = traj_data.copy()
 
     # calculate cell_id
     poi_data["cell_id"] = poi_data["x"] + (poi_data["y"] - 1) * 200
-    user_data["cell_id"] = user_data["x"] + (user_data["y"] - 1) * 200
+    traj_data["cell_id"] = traj_data["x"] + (traj_data["y"] - 1) * 200
 
     # create a dataframe containing all 40000 cells
     static_nodes = pd.DataFrame({
@@ -284,7 +304,7 @@ def data_preprocessing_static_graph(poi_data, user_data):
         "y": np.repeat(np.arange(1, 201), 200)  # Repeat 1 to 200 for each y
     })
 
-    # POI_feature count per category and total_POI_count
+    # POI_feature count per category
     poi_features = (
         poi_data
         .pivot_table(index="cell_id",
@@ -294,12 +314,11 @@ def data_preprocessing_static_graph(poi_data, user_data):
                      fill_value=0)
         .reset_index()
         .rename(columns=lambda x: f"POI_cat_{x}" if x != "cell_id" else "cell_id")
-        .assign(total_POI_count=lambda df: df.drop(columns="cell_id").sum(axis=1).astype(int))
     )
 
     # average dwell time per cell
     avg_dwell_time = (
-        user_data
+        traj_data
         .groupby("uid", group_keys=False)
         [["uid", "timedelta_since_last_movement", "cell_id"]]
         .apply(add_stay_id)
@@ -311,7 +330,7 @@ def data_preprocessing_static_graph(poi_data, user_data):
 
     # normalized visitor count per cell
     visitor_count = (
-        user_data
+        traj_data
         .groupby("cell_id")
         .size()
         .pipe(lambda count: np.log1p(count) / np.log1p(count).max())
@@ -325,7 +344,7 @@ def data_preprocessing_static_graph(poi_data, user_data):
     merged = merged.fillna(0)
 
     # Cast all columns except "avg_dwell_time" to int
-    cols_to_int = merged.columns.difference(["avg_dwell_time"])
+    cols_to_int = merged.columns.difference(["visitor_count", "avg_dwell_time"])
     merged[cols_to_int] = merged[cols_to_int].astype(int)
 
     return downcast_dataframe(merged)
@@ -333,7 +352,10 @@ def data_preprocessing_static_graph(poi_data, user_data):
 
 # -------- Data Checks -------- #
 
-def check_for_new_cells_after_day_60(df, city_idx):
+def check_for_new_cells_after_day_60(city_idx):
+    RAW_FULL_DATA_PATH = f"./data/dataset_humob_2024/full_city_data/city{city_idx}-dataset.csv"
+    df = load_csv_file(RAW_FULL_DATA_PATH)
+
     visited_before = set(map(tuple, df.loc[df["d"] < 60, ["x", "y"]].values))
     visited_after = set(map(tuple, df.loc[df["d"] >= 60, ["x", "y"]].values))
     new_cells_after_60 = visited_after.difference(visited_before)
@@ -344,40 +366,53 @@ def check_for_new_cells_after_day_60(df, city_idx):
     else:
         print(f"No new cells visited in city {city_idx} after day 60 — all were already seen before.")
 
+
+def total_num_of_records():
+    total_num_of_records = 0
+    for city_idx in ["A", "B", "C", "D"]:
+        RAW_CITY_DATA_PATH = f"./data/dataset_humob_2024/city{city_idx}-groundtruthdata.csv"
+        data = load_csv_file(RAW_CITY_DATA_PATH)
+        total_num_of_records += len(data)
+    print(f"Total Number of Records: {total_num_of_records}")
+
+
 if __name__ == "__main__":
-    for city_idx in ["B", "C", "D"]:  # "A", "B", "C", "D"
+    for city_idx in ["D", "C", "B"]:  # "A", "B", "C", "D"
         print(f"Currently processing city: {city_idx}")
 
         print("Load city data ... ")
-        RAW_CITY_DATA_PATH = f"./data/original/city{city_idx}-dataset.csv"
-        user_data = load_csv_file(RAW_CITY_DATA_PATH)
+        RAW_CITY_DATA_PATH = f"./data/dataset_humob_2024/city{city_idx}_challengedata.csv"
+        city_data = load_csv_file(RAW_CITY_DATA_PATH)
         print("Finished loading city data.")
 
-        # check_for_new_cells_after_day_60(user_data, city_idx)
-
-        # for the 2024 challenge only days 1 to 60 were known
         if city_idx != "A":
-            user_data = user_data[user_data["d"] < 60]
+            print("Start splitting data ...")
+            mask = (city_data["x"] == 999) & (city_data["y"] == 999)
+            prediction_data = city_data[mask].copy()
+            city_data = city_data[~mask]  # remaining data
+            RAW_PREDICTION_DATA_PATH = f"./data/raw/city{city_idx}_prediction_data.csv"
+            store_csv_file(RAW_PREDICTION_DATA_PATH, prediction_data)
+            print("Finished splitting data.")
 
         print("Start processing trajectory data ... ")
-        preprocessed_trajectory_data = data_preprocessing_user_trajectories(user_data)
-        PREPROCESSED_TRAJECTORY_DATA_PATH = f"./data/raw/city{city_idx}-trajectory-dataset-preprocessed.csv"
+        preprocessed_trajectory_data = data_preprocessing_trajectory_data(city_data)
+        PREPROCESSED_TRAJECTORY_DATA_PATH = f"./data/raw/city{city_idx}_trajectory_data.csv"
         store_csv_file(PREPROCESSED_TRAJECTORY_DATA_PATH, preprocessed_trajectory_data)
         print("Finished processing trajectory data.")
 
+        print("Start processing user data ... ")
+        preprocessed_user_data = data_preprocessing_user_data(preprocessed_trajectory_data)
+        PREPROCESSED_USER_DATA_PATH = f"./data/raw/city{city_idx}_user_features.csv"
+        store_csv_file(PREPROCESSED_USER_DATA_PATH, preprocessed_user_data)
+        print("Finished processing user data.")
+
         print("Load POI data ... ")
-        RAW_POI_DATA_PATH = f"./data/original/POIdata_city{city_idx}.csv"
+        RAW_POI_DATA_PATH = f"./data/dataset_humob_2024/POIdata_city{city_idx}.csv"
         poi_data = load_csv_file(RAW_POI_DATA_PATH)
         print("Finish loading POI data.")
 
-        print("Start processing user information data ... ")
-        preprocessed_user_data = data_preprocessing_user_info(preprocessed_trajectory_data)
-        PREPROCESSED_USER_DATA_PATH = f"./data/raw/city{city_idx}-user-information-preprocessed.csv"
-        store_csv_file(PREPROCESSED_USER_DATA_PATH, preprocessed_user_data)
-        print("Finished processing user information data.")
-
-        print("Start processing static graph data ... ")
-        preprocessed_static_data = data_preprocessing_static_graph(poi_data, preprocessed_trajectory_data)
-        PREPROCESSED_STATIC_DATA_PATH = f"./data/raw/city{city_idx}-static-graph-preprocessed.csv"
-        store_csv_file(PREPROCESSED_STATIC_DATA_PATH, preprocessed_static_data)
-        print("Finished processing static graph data.")
+        print("Start processing location data ... ")
+        preprocessed_location_data = data_preprocessing_location_data(poi_data, preprocessed_trajectory_data)
+        PREPROCESSED_LOCATION_DATA_PATH = f"./data/raw/city{city_idx}_location_features.csv"
+        store_csv_file(PREPROCESSED_LOCATION_DATA_PATH, preprocessed_location_data)
+        print("Finished processing location data.")
