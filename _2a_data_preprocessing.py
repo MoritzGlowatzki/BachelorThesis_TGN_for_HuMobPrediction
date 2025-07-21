@@ -252,9 +252,10 @@ def data_preprocessing_trajectory_data(city_data):
     # drop home_x, home_y, work_x and work_y
     traj_data_extended.drop(columns=["home_x", "home_y", "work_x", "work_y"], inplace=True)
 
-    # cast all columns except "distance_to_last_position", "distance_from_home", "distance_from_work" to int
+    # cast all columns to int, except:
+    # "distance_to_last_position", "distance_from_home", "distance_from_work", "d_sin", "d_cos", "t_sin", "t_cos"
     cols_to_int = traj_data_extended.columns.difference(
-        ["distance_to_last_position", "distance_from_home", "distance_from_work"])
+        ["distance_to_last_position", "distance_from_home", "distance_from_work", "d_sin", "d_cos", "t_sin", "t_cos"])
     traj_data_extended[cols_to_int] = traj_data_extended[cols_to_int].astype(int)
 
     return downcast_dataframe(traj_data_extended)
