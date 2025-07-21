@@ -14,7 +14,9 @@ class UserLocationInteractionDataset(InMemoryDataset):
     @property
     def raw_file_names(self):
         # relative to root/raw/
-        return [f"city{self.city_idx}-trajectory-dataset-preprocessed.csv"]
+        return [f"city{self.city_idx}_trajectory_data.csv",
+                f"city{self.city_idx}_user_features.csv",
+                f"city{self.city_idx}_location_features.csv"]
 
     @property
     def processed_file_names(self):
@@ -23,9 +25,12 @@ class UserLocationInteractionDataset(InMemoryDataset):
 
     def process(self) -> None:
         # load the CSV into a Pandas DataFrame.
-        raw_path = self.raw_paths[0]
-        df = pd.read_csv(raw_path)
-        df = df[df["uid"] < 10]
+        traj_data = pd.read_csv(self.raw_paths[0])
+        user_data = pd.read_csv(self.raw_paths[1])
+        location_data = pd.read_csv(self.raw_paths[2])
+
+        # TODO: DELETE LATER
+        df = traj_data[traj_data["uid"] < 100]  # do not use the entire dataset, but the first 100 users
 
         self.num_users = df["uid"].nunique()
         self.num_visited_locations = df["cell_id"].nunique()
@@ -33,37 +38,49 @@ class UserLocationInteractionDataset(InMemoryDataset):
         src = []  # user nodes
         dst = []  # location nodes
         timestamps = []
-        is_recorded = []
+        user_infos = []
+        location_infos = []
+        edge_features = []
 
-        # Group by user
         for uid, group in df.groupby("uid"):
-            # Create edges: from user to each location
-            src.extend([uid] * len(group))  # uid → cell_id
+            # create edges: from user to each location (uid → cell_id)
+            src.extend([uid] * len(group))
             dst.extend(group["cell_id"].tolist())
             timestamps.extend(group["timestamp"].tolist())
-            is_recorded.extend(group["is_recorded"].tolist())
 
-        # Convert to tensors
+            user_info = user_data[user_data["uid"] == uid].values.tolist()
+            user_infos.extend(user_info * len(group))  # replicate user feature per edge
+
+            location_info = location_data[location_data["cell_id"].isin(group["cell_id"])].set_index("cell_id").loc[
+                group["cell_id"]].values.tolist()
+            location_infos.extend(location_info)
+
+            edge_features.extend(
+                group.drop(columns=["uid", "d", "t", "x", "y", "cell_id", "timestamp"]).values.tolist())
+
+        # convert to tensors
         src = torch.tensor(src, dtype=torch.long)  # [E]
         dst = torch.tensor(dst, dtype=torch.long)  # [E]
-        dst += int(src.max()) + 1  # location cell ids start after user ids
+        dst += int(src.max())  # location cell_ids start after user ids
         timestamps = torch.tensor(timestamps, dtype=torch.long)  # [E]
-        edge_attr = torch.tensor(is_recorded, dtype=torch.float).unsqueeze(
-            1)  # [E,1] -> unsqueeze because edge_attr is expected to be a 2-D tensor of shape [num_edges, num_edge_features]
+        user_feats = torch.tensor(user_infos, dtype=torch.float)  # [E, num_user _features]
+        location_feats = torch.tensor(location_infos, dtype=torch.float)  # [E, num_location_features]
+        edge_attr = torch.tensor(edge_features, dtype=torch.float)  # [E, num_edge_features]
 
-        # Globally sort by timestamp t_all to ensure strict time causality
+        # globally sort by timestamp t_all to ensure strict time causality
         sorted_idx = torch.argsort(timestamps)
         src = src[sorted_idx]
         dst = dst[sorted_idx]
         timestamps = timestamps[sorted_idx]
         edge_attr = edge_attr[sorted_idx]
 
-        # Build a TemporalData object
+        # build a TemporalData object
         data = TemporalData(
             src=src,  # [E]
             dst=dst,  # [E]
             t=timestamps,  # [E]
-            node_feats=None,  # not defined yet
+            user_node_feats=user_feats,  # [E, num_user _features]
+            location_node_feats=location_feats,  # [E, num_location_features]
             msg=edge_attr,  # [E, num_edge_features]
         )
 
@@ -71,16 +88,40 @@ class UserLocationInteractionDataset(InMemoryDataset):
 
 
 if __name__ == "__main__":
-    # original_df = load_csv_file("./data/original/cityD-dataset.csv")
-    # filtered_original_df = original_df[(original_df["d"] != 26) & (original_df["d"] < 60)]
-    # print(f"Number of unique users: {filtered_original_df["uid"].nunique()}")
-    # print(f"Number of unique locations: {filtered_original_df.drop_duplicates(subset=["x", "y"]).shape[0]}")
-    #
-    # df = load_csv_file("./data/raw/cityD-trajectory-dataset-preprocessed.csv")
-    # print(f"Number of unique users: {df["uid"].nunique()}")
-    # print(f"Number of unique locations: {df["cell_id"].nunique()}")
+    dataset = UserLocationInteractionDataset(root="data", city_idx="D")
+    data = dataset[0]
 
-    data = UserLocationInteractionDataset(root="data", city_idx="D")
-    data = data[0]
-    print(f"Number of unique users in TemporalData object: {torch.unique(data.src).numel()}")
-    print(f"Number of unique locations in TemporalData object: {torch.unique(data.dst).numel()}")
+    print("\n=== Sanity Checks ===")
+    print(f"Total number of edges: {data.src.size(0)}")
+    print(f"Unique users (src): {torch.unique(data.src).numel()}")
+    print(f"Unique locations (dst): {torch.unique(data.dst).numel()}")
+    print(f"Timestamps shape: {data.t.shape}")
+    print(f"Edge features shape: {data.msg.shape}")
+    print(f"User node features shape: {data.user_node_feats.shape}")
+    print(f"Location node features shape: {data.location_node_feats.shape}")
+
+    # check timestamp ordering
+    timestamps = data.t.flatten()
+    timestamp_diffs = timestamps[1:] - timestamps[:-1]
+    assert torch.all(timestamp_diffs >= 0).item(), "Timestamps are not sorted!"
+    print("Timestamps are sorted.")
+
+    # check proper ID offset
+    offset = int(data.src.max()) + 1
+    min_dst = int(data.dst.min())
+    assert min_dst >= offset, f"Location IDs not offset correctly: {min_dst} < {offset}"
+    print(f"Location node offset verified (min dst = {min_dst}, offset = {offset})")
+
+    # print a random edge sample
+    import random
+
+    idx = random.randint(0, data.src.size(0) - 1)
+    print(f"\n=== Random Edge [{idx}] ===")
+    print(f"User ID (src): {data.src[idx].item()}")
+    print(f"Location ID (dst): {data.dst[idx].item()}")
+    print(f"Timestamp: {data.t[idx].item()}")
+    print(f"Edge feature (msg): {data.msg[idx].tolist()}")
+    print(f"User features: {data.user_node_feats[idx].tolist()}")
+    print(f"Location features: {data.location_node_feats[idx].tolist()}")
+
+    print("\n✅ All checks complete.")
