@@ -252,7 +252,7 @@ def data_preprocessing_trajectory_data(city_data):
     # drop home_x, home_y, work_x and work_y
     traj_data_extended.drop(columns=["home_x", "home_y", "work_x", "work_y"], inplace=True)
 
-    # Cast all columns except "distance_to_last_position", "distance_from_home", "distance_from_work" to int
+    # cast all columns except "distance_to_last_position", "distance_from_home", "distance_from_work" to int
     cols_to_int = traj_data_extended.columns.difference(
         ["distance_to_last_position", "distance_from_home", "distance_from_work"])
     traj_data_extended[cols_to_int] = traj_data_extended[cols_to_int].astype(int)
@@ -300,8 +300,8 @@ def data_preprocessing_location_data(poi_data, traj_data):
     # create a dataframe containing all 40000 cells
     static_nodes = pd.DataFrame({
         "cell_id": np.arange(1, 40001),
-        "x": np.tile(np.arange(1, 201), 200),  # Repeat 1 to 200 200 times for each x
-        "y": np.repeat(np.arange(1, 201), 200)  # Repeat 1 to 200 for each y
+        "x": np.tile(np.arange(1, 201), 200),  # repeat 1 to 200 200 times for each x
+        "y": np.repeat(np.arange(1, 201), 200)  # repeat 1 to 200 for each y
     })
 
     # POI_feature count per category
@@ -312,6 +312,7 @@ def data_preprocessing_location_data(poi_data, traj_data):
                      values="POI_count",
                      aggfunc="sum",
                      fill_value=0)
+        .reindex(columns=(i for i in range(1, 86)), fill_value=0)  # ensure that all 85 categories are existent
         .reset_index()
         .rename(columns=lambda x: f"POI_cat_{x}" if x != "cell_id" else "cell_id")
     )
@@ -343,7 +344,7 @@ def data_preprocessing_location_data(poi_data, traj_data):
     merged = pd.merge(merged, avg_dwell_time, on="cell_id", how="left")
     merged = merged.fillna(0)
 
-    # Cast all columns except "avg_dwell_time" to int
+    # cast all columns except "avg_dwell_time" to int
     cols_to_int = merged.columns.difference(["visitor_count", "avg_dwell_time"])
     merged[cols_to_int] = merged[cols_to_int].astype(int)
 
@@ -377,7 +378,7 @@ def total_num_of_records():
 
 
 if __name__ == "__main__":
-    for city_idx in ["D", "C", "B"]:  # "A", "B", "C", "D"
+    for city_idx in ["B", "C", "D"]:  # "A", "B", "C", "D"
         print(f"Currently processing city: {city_idx}")
 
         print("Load city data ... ")
