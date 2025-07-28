@@ -30,7 +30,8 @@ class UserLocationInteractionDataset(InMemoryDataset):
         location_data = pd.read_csv(self.raw_paths[2])
 
         # TODO: DELETE LATER
-        df = traj_data[traj_data["uid"] < 100]  # do not use the entire dataset, but the first 100 users
+        df = traj_data[(traj_data["uid"] >= 3000) & (
+                    traj_data["uid"] <= 6000)]  # do not use the entire dataset, but the users to predict in cityD
 
         self.num_users = df["uid"].nunique()
         self.num_visited_locations = df["cell_id"].nunique()
@@ -40,7 +41,7 @@ class UserLocationInteractionDataset(InMemoryDataset):
         timestamps = []
         user_infos = []
         location_infos = []
-        edge_features = []
+        edge_infos = []
 
         for uid, group in df.groupby("uid"):
             # create edges: from user to each location (uid → cell_id)
@@ -51,12 +52,15 @@ class UserLocationInteractionDataset(InMemoryDataset):
             user_info = user_data[user_data["uid"] == uid].values.tolist()
             user_infos.extend(user_info * len(group))  # replicate user feature per edge
 
-            location_info = location_data[location_data["cell_id"].isin(group["cell_id"])].set_index("cell_id").loc[
-                group["cell_id"]].values.tolist()
+            location_info = (location_data[location_data["cell_id"].isin(group["cell_id"])]
+                             .set_index("cell_id")
+                             .loc[group["cell_id"]]
+                             .reset_index()
+                             .values.tolist())
             location_infos.extend(location_info)
 
-            edge_features.extend(
-                group.drop(columns=["uid", "d", "t", "x", "y", "cell_id", "timestamp"]).values.tolist())
+            edge_infos.extend(
+                group.drop(columns=["uid", "d", "t", "x", "y", "cell_id"]).values.tolist())
 
         # convert to tensors
         src = torch.tensor(src, dtype=torch.long)  # [E]
@@ -65,23 +69,23 @@ class UserLocationInteractionDataset(InMemoryDataset):
         timestamps = torch.tensor(timestamps, dtype=torch.long)  # [E]
         user_feats = torch.tensor(user_infos, dtype=torch.float)  # [E, num_user _features]
         location_feats = torch.tensor(location_infos, dtype=torch.float)  # [E, num_location_features]
-        edge_attr = torch.tensor(edge_features, dtype=torch.float)  # [E, num_edge_features]
+        edge_feats = torch.tensor(edge_infos, dtype=torch.float)  # [E, num_edge_features]
 
         # globally sort by timestamp t_all to ensure strict time causality
         sorted_idx = torch.argsort(timestamps)
         src = src[sorted_idx]
         dst = dst[sorted_idx]
         timestamps = timestamps[sorted_idx]
-        edge_attr = edge_attr[sorted_idx]
+        edge_feats = edge_feats[sorted_idx]
 
         # build a TemporalData object
         data = TemporalData(
             src=src,  # [E]
             dst=dst,  # [E]
             t=timestamps,  # [E]
-            user_node_feats=user_feats,  # [E, num_user _features]
-            location_node_feats=location_feats,  # [E, num_location_features]
-            msg=edge_attr,  # [E, num_edge_features]
+            user_feats=user_feats,  # [E, num_user _features]
+            location_feats=location_feats,  # [E, num_location_features]
+            edge_feats=edge_feats,  # [E, num_edge_features]
         )
 
         torch.save(self.collate([data]), self.processed_paths[0])
@@ -96,9 +100,9 @@ if __name__ == "__main__":
     print(f"Unique users (src): {torch.unique(data.src).numel()}")
     print(f"Unique locations (dst): {torch.unique(data.dst).numel()}")
     print(f"Timestamps shape: {data.t.shape}")
-    print(f"Edge features shape: {data.msg.shape}")
-    print(f"User node features shape: {data.user_node_feats.shape}")
-    print(f"Location node features shape: {data.location_node_feats.shape}")
+    print(f"User node features shape: {data.user_feats.shape}")
+    print(f"Edge features shape: {data.edge_feats.shape}")
+    print(f"Location node features shape: {data.location_feats.shape}")
 
     # check timestamp ordering
     timestamps = data.t.flatten()
@@ -120,8 +124,10 @@ if __name__ == "__main__":
     print(f"User ID (src): {data.src[idx].item()}")
     print(f"Location ID (dst): {data.dst[idx].item()}")
     print(f"Timestamp: {data.t[idx].item()}")
-    print(f"Edge feature (msg): {data.msg[idx].tolist()}")
-    print(f"User features: {data.user_node_feats[idx].tolist()}")
-    print(f"Location features: {data.location_node_feats[idx].tolist()}")
+    print(f"User features: {data.user_feats[idx].tolist()}")
+    print(f"Edge features: {data.edge_feats[idx].tolist()}")
+    print(f"Location features: {data.location_feats[idx].tolist()}")
+    print(f"Message: {torch.cat(
+        [data.user_feats[idx], data.edge_feats[idx], data.location_feats[idx]], dim=-1)}")
 
     print("\n✅ All checks complete.")
