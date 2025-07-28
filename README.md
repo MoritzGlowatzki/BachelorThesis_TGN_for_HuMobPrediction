@@ -1,4 +1,4 @@
-# Temporal Graph Networks (TGN) for Human Mobility Prediction
+# Temporal Graph Network (TGN) for Human Mobility Prediction
 
 This repository contains the implementation for the Bachelor's Thesis:
 
