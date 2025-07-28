@@ -1,21 +1,23 @@
 # Temporal Graph Network (TGN) for Human Mobility Prediction
 
-This repository contains the implementation for the Bachelor's Thesis:
+<div align="center">
 
-**“Human Mobility Prediction with Continuous-Time Dynamic Graphs and Temporal Graph Networks”**  
-(*Vorhersage menschlicher Mobilität mit kontinuierlich-zeitdynamischen Graphen und Temporal Graph Networks*)
----
+> <img src="https://upload.wikimedia.org/wikipedia/commons/c/c8/Logo_of_the_Technical_University_of_Munich.svg" width="120"/>
+>
+> #### School of Computation, Information and Technology – Informatics<br> Technische Universität München (TUM)
+>
+> _Bachelor's Thesis in Information Systems (Wirtschaftsinformatik)_
+>
+> ### "Human Mobility Prediction with Continuous-Time Dynamic Graphs and Temporal Graph Networks" <br> *(Vorhersage
+menschlicher Mobilität mit kontinuierlich-zeitdynamischen Graphen und Temporal Graph Networks)*
+>
+> **Author:** Moritz Glowatzki  
+> **Examiner:** Prof. Dr. Martin Werner  
+> **Supervisor:** MSc. Paul Walther
 
-## 🎓 Thesis Information
+</div>
 
-- **University:** Technische Universität München (TUM)
-- **Faculty:** School of Computation, Information and Technology – Informatics
-- **Program:** Bachelor's Thesis in Information Systems (Wirtschaftsinformatik)
-- **Author:** Moritz Glowatzki
-- **Examiner:** Prof. Dr. Martin Werner
-- **Supervisor:** MSc. Paul Walther
-
----
+<br>
 
 ## 📂 Project Structure
 
@@ -50,7 +52,7 @@ This repository contains the implementation for the Bachelor's Thesis:
 └── 🐍 visualize_trajectory.py               # Custom Trajectory visualization
 ```
 
----
+<br>
 
 ## 📊 Dataset Information
 
@@ -64,7 +66,7 @@ Please refer to their official documentation for details on licensing and citati
 City-scale and longitudinal dataset of anonymized human mobility trajectories. Scientific Data, 11(1),
 397. https://www.nature.com/articles/s41597-024-03237-9
 
----
+<br>
 
 ## 📜 License
 
