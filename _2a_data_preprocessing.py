@@ -4,6 +4,32 @@ from tqdm import tqdm
 from _1_data_IO import *
 
 
+# -------- Data Checks -------- #
+
+def check_for_new_cells_after_day_60(city_idx):
+    RAW_FULL_DATA_PATH = f"./data/dataset_humob_2024/full_city_data/city{city_idx}-dataset.csv"
+    df = load_csv_file(RAW_FULL_DATA_PATH)
+
+    visited_before = set(map(tuple, df.loc[df["d"] < 60, ["x", "y"]].values))
+    visited_after = set(map(tuple, df.loc[df["d"] >= 60, ["x", "y"]].values))
+    new_cells_after_60 = visited_after.difference(visited_before)
+    total_visited = df.drop_duplicates(subset=["x", "y"]).shape[0]
+    if new_cells_after_60:
+        print(
+            f"{len(new_cells_after_60)} out of {total_visited} cells in city {city_idx} visited after day 60 were new (not seen before).")
+    else:
+        print(f"No new cells visited in city {city_idx} after day 60 — all were already seen before.")
+
+
+def total_num_of_records():
+    total_num_of_records = 0
+    for city_idx in ["A", "B", "C", "D"]:
+        RAW_CITY_DATA_PATH = f"./data/dataset_humob_2024/city{city_idx}-groundtruthdata.csv"
+        data = load_csv_file(RAW_CITY_DATA_PATH)
+        total_num_of_records += len(data)
+    print(f"Total Number of Records: {total_num_of_records}")
+
+
 # -------- Estimations, Calculations, Helper Functions -------- #
 
 def estimate_home_location(df):
@@ -143,6 +169,7 @@ def downcast_dataframe(df):
         elif pd.api.types.is_float_dtype(dtype):
             df[col] = pd.to_numeric(df[col], downcast="float")
     return df
+
 
 # -------- Data Preprocessing -------- #
 
@@ -350,32 +377,6 @@ def data_preprocessing_location_data(poi_data, traj_data):
     merged[cols_to_int] = merged[cols_to_int].astype(int)
 
     return downcast_dataframe(merged)
-
-
-# -------- Data Checks -------- #
-
-def check_for_new_cells_after_day_60(city_idx):
-    RAW_FULL_DATA_PATH = f"./data/dataset_humob_2024/full_city_data/city{city_idx}-dataset.csv"
-    df = load_csv_file(RAW_FULL_DATA_PATH)
-
-    visited_before = set(map(tuple, df.loc[df["d"] < 60, ["x", "y"]].values))
-    visited_after = set(map(tuple, df.loc[df["d"] >= 60, ["x", "y"]].values))
-    new_cells_after_60 = visited_after.difference(visited_before)
-    total_visited = df.drop_duplicates(subset=["x", "y"]).shape[0]
-    if new_cells_after_60:
-        print(
-            f"{len(new_cells_after_60)} out of {total_visited} cells in city {city_idx} visited after day 60 were new (not seen before).")
-    else:
-        print(f"No new cells visited in city {city_idx} after day 60 — all were already seen before.")
-
-
-def total_num_of_records():
-    total_num_of_records = 0
-    for city_idx in ["A", "B", "C", "D"]:
-        RAW_CITY_DATA_PATH = f"./data/dataset_humob_2024/city{city_idx}-groundtruthdata.csv"
-        data = load_csv_file(RAW_CITY_DATA_PATH)
-        total_num_of_records += len(data)
-    print(f"Total Number of Records: {total_num_of_records}")
 
 
 if __name__ == "__main__":
