@@ -58,6 +58,29 @@ class LinkPredictor(torch.nn.Module):
         return self.lin_final(h)
 
 
+class LinkPredictorWithTime(torch.nn.Module):
+    """
+    Given source and destination node embeddings and a timestamp, predicts the
+    probability of a link occurring at that time.
+
+    Uses two linear transformations (for source and destination) plus a linear
+    transform of the scalar timestamp t (unsqueezed to [batch_size, 1]), sums
+    them, applies ReLU, and then a final linear layer to output a single logit.
+    """
+
+    def __init__(self, in_channels):
+        super().__init__()
+        self.lin_src = torch.nn.Linear(in_channels, in_channels)
+        self.lin_dst = torch.nn.Linear(in_channels, in_channels)
+        self.lin_time = torch.nn.Linear(1, in_channels)
+        self.lin_final = torch.nn.Linear(in_channels, 1)
+
+    def forward(self, z_src, z_dst, t):
+        h = self.lin_src(z_src) + self.lin_dst(z_dst) + self.lin_time(t.to(z_src.dtype).unsqueeze(-1))
+        h = h.relu()
+        return self.lin_final(h)
+
+
 # -------- TGN Model -------- #
 class TGNModel(torch.nn.Module):
     """
@@ -109,10 +132,14 @@ class TGNModel(torch.nn.Module):
         ).to(device)
 
         # Link predictor for source-destination pairs
-        self.link_pred = LinkPredictor(in_channels=embedding_dim).to(device)
+        self.link_pred = LinkPredictorWithTime(in_channels=embedding_dim).to(device)
 
         # Association tensor for mapping global to local node indices
         self.assoc = torch.empty(num_nodes, dtype=torch.long, device=device)
+
+    def concatenate_message(self, user_feats, edge_feats, location_feats):
+        # TODO: learned message concatenation?
+        return torch.cat([user_feats, edge_feats, location_feats], dim=-1)
 
     def reset_state(self):
         # Resets memory and neighbor loader states at epoch start
@@ -127,25 +154,29 @@ class TGNModel(torch.nn.Module):
 
         # Get memory vectors and last update times
         z, last_update = self.memory(n_id)
+        msg = self.concatenate_message(data.user_feats[e_id], data.edge_feats[e_id], data.location_feats[e_id])
+
         # Update embeddings via GNN
         z = self.gnn(z, last_update,
                      edge_index,
                      data.t[e_id].to(self.device),
-                     data.msg[e_id].to(self.device))
+                     msg.to(self.device))
         return z
 
-    def predict_scores(self, z, src, dst, neg_dst=None, neg_ratio=1.0):
+    def predict_scores(self, z, src, dst, t, neg_dst=None, neg_ratio=1.0):
         # Positive score
-        pos_out = self.link_pred(z[self.assoc[src]], z[self.assoc[dst]])
+        pos_out = self.link_pred(z[self.assoc[src]], z[self.assoc[dst]], t)
         # Negative score (if neg_dst provided)
         if neg_dst is not None:
             neg_src = src.repeat_interleave(int(neg_ratio))
-            neg_out = self.link_pred(z[self.assoc[neg_src]], z[self.assoc[neg_dst]])
+            neg_t = t.repeat_interleave(int(neg_ratio))
+            neg_out = self.link_pred(z[self.assoc[neg_src]], z[self.assoc[neg_dst]], neg_t)
             return pos_out, neg_out
         return pos_out, None
 
-    def update_states(self, src, dst, t, msg):
+    def update_states(self, src, dst, t, user_feats, edge_feats, location_feats):
         # Update memory and neighbor histories
+        msg = self.concatenate_message(user_feats, edge_feats, location_feats)
         self.memory.update_state(src, dst, t, msg)
         self.neighbor_loader.insert(src, dst)
 
@@ -174,14 +205,14 @@ def train_epoch(model, train_loader, data, optimizer, criterion, epoch, writer=N
 
         # Step 2: Score positive and negative edges
         pos_out, neg_out = model.predict_scores(
-            z, batch.src, batch.dst, batch.neg_dst, train_loader.neg_sampling_ratio)
+            z, batch.src, batch.dst, batch.t, batch.neg_dst, train_loader.neg_sampling_ratio)
 
         # Step 3: Compute loss: positives → label 1, negatives → label 0
         loss = criterion(pos_out, torch.ones_like(pos_out))
         loss += criterion(neg_out, torch.zeros_like(neg_out))
 
         # Step 4: Update memory and neighbor history before backpropagation
-        model.update_states(batch.src, batch.dst, batch.t, batch.msg)
+        model.update_states(batch.src, batch.dst, batch.t, batch.user_feats, batch.edge_feats, batch.location_feats)
 
         # Step 5: Backpropagate and optimize
         optimizer.zero_grad()
@@ -197,7 +228,7 @@ def train_epoch(model, train_loader, data, optimizer, criterion, epoch, writer=N
     avg_loss = total_loss / total_events
 
     if writer is not None:
-        writer.add_scalar('Loss/Train', avg_loss, epoch)
+        writer.add_scalar("Loss/Train", avg_loss, epoch)
 
     return avg_loss
 
@@ -221,7 +252,7 @@ def evaluate(model, loader, data, epoch, split, writer=None):
 
             # Compute scores
             pos_out, neg_out = model.predict_scores(
-                z, batch.src, batch.dst, batch.neg_dst, loader.neg_sampling_ratio)
+                z, batch.src, batch.dst, batch.t, batch.neg_dst, loader.neg_sampling_ratio)
 
             # Concatenate predictions and labels
             y_pred = torch.cat([pos_out, neg_out], dim=0).sigmoid().cpu()
@@ -235,29 +266,29 @@ def evaluate(model, loader, data, epoch, split, writer=None):
             aucs.append(roc_auc_score(y_true, y_pred))
 
             # Update states
-            model.update_states(batch.src, batch.dst, batch.t, batch.msg)
+            model.update_states(batch.src, batch.dst, batch.t, batch.user_feats, batch.edge_feats, batch.location_feats)
 
     mean_ap = float(torch.tensor(aps).mean())
     mean_auc = float(torch.tensor(aucs).mean())
 
     if writer is not None:
-        writer.add_scalar(f'Metrics/{split}_AP', mean_ap, epoch)
-        writer.add_scalar(f'Metrics/{split}_AUC', mean_auc, epoch)
+        writer.add_scalar(f"Metrics/{split}_AP", mean_ap, epoch)
+        writer.add_scalar(f"Metrics/{split}_AUC", mean_auc, epoch)
 
     return mean_ap, mean_auc
 
 
 # -------- Main Training Function -------- #
-if __name__ == '__main__':
+if __name__ == "__main__":
     # Device configuration
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Model training on device: {device}")
 
     # Load temporal interaction dataset
     dataset = UserLocationInteractionDataset(root="data", city_idx="D")
     data = dataset[0].to(device)
 
-    neg_sampling_ratio = 1.0
+    neg_sampling_ratio = 20.0
 
     # Split data and initialize data loaders
     train_data, val_data, test_data = data.train_val_test_split(val_ratio=0.15, test_ratio=0.15)
@@ -269,7 +300,7 @@ if __name__ == '__main__':
     # Instantiate TGNModel
     model = TGNModel(
         num_nodes=data.num_nodes,
-        msg_dim=data.msg.size(-1),
+        msg_dim=(data.user_feats.size(-1) + data.edge_feats.size(-1) + data.location_feats.size(-1)),
         memory_dim=100,
         time_dim=100,
         embedding_dim=100,
@@ -280,30 +311,33 @@ if __name__ == '__main__':
     # Optimizer and loss
     optimizer = torch.optim.Adam(
         set(model.memory.parameters()) | set(model.gnn.parameters()) | set(model.link_pred.parameters()),
-        lr=0.0001
+        lr=0.001
     )
     criterion = torch.nn.BCEWithLogitsLoss()
 
     # TensorBoard writer
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    writer = SummaryWriter(log_dir=f'./model_training_runs/TGN-training_{timestamp}')
+    writer = SummaryWriter(log_dir=f"./model_training_runs/TGN-training_{timestamp}")
 
     # Training loop
     for epoch in range(1, 51):
         loss = train_epoch(model, train_loader, data, optimizer, criterion, epoch, writer)
-        print(f'Epoch: {epoch:02d}, Loss: {loss:.4f}')
+        print(f"Epoch: {epoch:02d}, Loss: {loss:.4f}")
 
-        val_ap, val_auc = evaluate(model, val_loader, data, epoch, 'Val', writer)
-        test_ap, test_auc = evaluate(model, test_loader, data, epoch, 'Test', writer)
-        print(f'Val AP: {val_ap:.4f}, Val AUC: {val_auc:.4f}')
-        print(f'Test AP: {test_ap:.4f}, Test AUC: {test_auc:.4f}')
+        val_ap, val_auc = evaluate(model, val_loader, data, epoch, "Val", writer)
+        test_ap, test_auc = evaluate(model, test_loader, data, epoch, "Test", writer)
+        print(f"Val AP: {val_ap:.4f}, Val AUC: {val_auc:.4f}")
+        print(f"Test AP: {test_ap:.4f}, Test AUC: {test_auc:.4f}")
 
-        # Save model checkpoint
-        torch.save({
-            'memory_state': model.memory.state_dict(),
-            'gnn_state': model.gnn.state_dict(),
-            'pred_state': model.link_pred.state_dict(),
-            'epoch': epoch
-        }, './model_training_runs/best_model.pt')
+    # Save model checkpoint
+    torch.save({
+        "memory_state": model.memory.state_dict(),
+        "gnn_state": model.gnn.state_dict(),
+        "pred_state": model.link_pred.state_dict(),
+        "memory_buffer": model.memory.memory.clone(),
+        "last_update": model.memory.last_update.clone(),
+        "neighbor_dict": model.neighbor_loader.neighbors.clone(),
+        'epoch': epoch
+    }, "./model_training_runs/best_model.pt")
 
     writer.close()
