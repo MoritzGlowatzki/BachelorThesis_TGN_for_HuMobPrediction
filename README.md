@@ -1,19 +1,18 @@
 # Temporal Graph Network (TGN) for Human Mobility Prediction
 
 <div align="center">
-
+ 
 > <img src="https://upload.wikimedia.org/wikipedia/commons/c/c8/Logo_of_the_Technical_University_of_Munich.svg" width="120"/>
 >
-> #### School of Computation, Information and Technology – Informatics<br> Technische Universität München (TUM)
+> #### School of Computation, Information and Technology – Informatics<br> Technische Universität München (TUM)  
 >
 > _Bachelor's Thesis in Information Systems (Wirtschaftsinformatik)_
 >
-> ### "Human Mobility Prediction with Continuous-Time Dynamic Graphs and Temporal Graph Networks" <br> *(Vorhersage
-menschlicher Mobilität mit kontinuierlich-zeitdynamischen Graphen und Temporal Graph Networks)*
+> ### "Human Mobility Prediction with Continuous-Time Dynamic Graphs and Temporal Graph Networks" <br> *(Vorhersage menschlicher Mobilität mit kontinuierlich-zeitdynamischen Graphen und Temporal Graph Networks)*  
 >
 > **Author:** Moritz Glowatzki  
 > **Examiner:** Prof. Dr. Martin Werner  
-> **Supervisor:** MSc. Paul Walther
+> **Supervisor:** MSc. Paul Walther  
 
 </div>
 
