@@ -1,5 +1,7 @@
 import numpy as np
 from tqdm import tqdm
+import argparse, json, os, sys
+
 
 from _1_data_IO import *
 
@@ -292,9 +294,14 @@ def data_preprocessing_user_data(traj_data):
     user_data = traj_data.copy()
 
     stats = []
+
     for uid, group in tqdm(user_data.groupby("uid"), desc="Calculating user stats"):
         home = estimate_home_location(group)
         work = estimate_work_location(group)
+
+        user_locs = list(group["cell_id"].unique())
+        user_locs = [int(cell_id) for cell_id in user_locs]
+
         stats.append({
             "uid": uid,
             "home_x": home["home_x"],
@@ -304,14 +311,14 @@ def data_preprocessing_user_data(traj_data):
             "work_y": work["work_y"],
             "work_cell_id": work["work_cell_id"],
             "average_movements_per_day": calculate_average_number_of_movements_per_day(group),
-            "average_travel_distance_per_day": calculate_average_travel_distance_per_day(group)
+            "average_travel_distance_per_day": calculate_average_travel_distance_per_day(group),
+            "user_specific_locations": json.dumps(user_locs)
         })
 
-    # build the DataFrame
     result = pd.DataFrame(stats)
 
-    # cast all columns except "average_movements_per_day" and "average_travel_distance_per_day" to int
-    cols_to_int = result.columns.difference(["average_movements_per_day", "average_travel_distance_per_day"])
+    # cast all columns except the floats and 'user_specific_locations'
+    cols_to_int = result.columns.difference(["average_movements_per_day", "average_travel_distance_per_day", "user_specific_locations"])
     result[cols_to_int] = result[cols_to_int].astype(int)
 
     return downcast_dataframe(result)
@@ -380,42 +387,60 @@ def data_preprocessing_location_data(poi_data, traj_data):
 
 
 if __name__ == "__main__":
-    for city_idx in ["B", "C", "D"]:  # "A", "B", "C", "D"
-        print(f"Currently processing city: {city_idx}")
+    parser = argparse.ArgumentParser(description="Preprocess data and add additional features.")
+    parser.add_argument("--city", type=str, default="D", help="Comma-separated list of city indices (e.g., A,B,C,D)")
+    parser.add_argument("--process", type=str, default="user,trajectory,location", help="Comma-separated processing steps: user, trajectory, location")
+    args = parser.parse_args()
 
-        print("Load city data ... ")
+    city_list = [city.strip() for city in args.city.split(",")]
+    process_list = [p.strip() for p in args.process.split(",")]
+
+    for city_idx in city_list:
+        print(f"=== Processing city: {city_idx} ===", flush=True)
+
+        print("Load city data ...", flush=True)
         RAW_CITY_DATA_PATH = f"./data/dataset_humob_2024/city{city_idx}_challengedata.csv"
         city_data = load_csv_file(RAW_CITY_DATA_PATH)
-        print("Finished loading city data.")
+        print("Finished loading city data.", flush=True)
 
         if city_idx != "A":
-            print("Start splitting data ...")
+            print("Start splitting data ...", flush=True)
             mask = (city_data["x"] == 999) & (city_data["y"] == 999)
             prediction_data = city_data[mask].copy()
-            city_data = city_data[~mask]  # remaining data
+            city_data = city_data[~mask]
             RAW_PREDICTION_DATA_PATH = f"./data/raw/city{city_idx}_prediction_data.csv"
             store_csv_file(RAW_PREDICTION_DATA_PATH, prediction_data)
-            print("Finished splitting data.")
+            print("Finished splitting data.", flush=True)
 
-        print("Start processing trajectory data ... ")
-        preprocessed_trajectory_data = data_preprocessing_trajectory_data(city_data)
-        PREPROCESSED_TRAJECTORY_DATA_PATH = f"./data/raw/city{city_idx}_trajectory_data.csv"
-        store_csv_file(PREPROCESSED_TRAJECTORY_DATA_PATH, preprocessed_trajectory_data)
-        print("Finished processing trajectory data.")
+        print("Start processing trajectory data ...", flush=True)
+        if "trajectory" in process_list:
+            preprocessed_trajectory_data = data_preprocessing_trajectory_data(city_data)
+            PREPROCESSED_TRAJECTORY_DATA_PATH = f"./data/raw/city{city_idx}_trajectory_data.csv"
+            store_csv_file(PREPROCESSED_TRAJECTORY_DATA_PATH, preprocessed_trajectory_data)
+        else:
+            PREPROCESSED_TRAJECTORY_DATA_PATH = f"./data/raw/city{city_idx}_trajectory_data.csv"
+            if not os.path.exists(PREPROCESSED_TRAJECTORY_DATA_PATH):
+                raise FileNotFoundError(f"{PREPROCESSED_TRAJECTORY_DATA_PATH} not found.")
+            preprocessed_trajectory_data = load_csv_file(PREPROCESSED_TRAJECTORY_DATA_PATH)
+        print("Finished processing trajectory data.", flush=True)
 
-        print("Start processing user data ... ")
-        preprocessed_user_data = data_preprocessing_user_data(preprocessed_trajectory_data)
-        PREPROCESSED_USER_DATA_PATH = f"./data/raw/city{city_idx}_user_features.csv"
-        store_csv_file(PREPROCESSED_USER_DATA_PATH, preprocessed_user_data)
-        print("Finished processing user data.")
+        if "user" in process_list:
+            print("Start processing user data ...", flush=True)
+            preprocessed_user_data = data_preprocessing_user_data(preprocessed_trajectory_data)
+            PREPROCESSED_USER_DATA_PATH = f"./data/raw/city{city_idx}_user_features.csv"
+            store_csv_file(PREPROCESSED_USER_DATA_PATH, preprocessed_user_data)
+            print("Finished processing user data.", flush=True)
 
-        print("Load POI data ... ")
-        RAW_POI_DATA_PATH = f"./data/dataset_humob_2024/POIdata_city{city_idx}.csv"
-        poi_data = load_csv_file(RAW_POI_DATA_PATH)
-        print("Finish loading POI data.")
+        if "location" in process_list:
+            print("Load POI data ...", flush=True)
+            RAW_POI_DATA_PATH = f"./data/dataset_humob_2024/POIdata_city{city_idx}.csv"
+            poi_data = load_csv_file(RAW_POI_DATA_PATH)
+            print("Finish loading POI data.", flush=True)
 
-        print("Start processing location data ... ")
-        preprocessed_location_data = data_preprocessing_location_data(poi_data, preprocessed_trajectory_data)
-        PREPROCESSED_LOCATION_DATA_PATH = f"./data/raw/city{city_idx}_location_features.csv"
-        store_csv_file(PREPROCESSED_LOCATION_DATA_PATH, preprocessed_location_data)
-        print("Finished processing location data.")
+            print("Start processing location data ...", flush=True)
+            preprocessed_location_data = data_preprocessing_location_data(poi_data, preprocessed_trajectory_data)
+            PREPROCESSED_LOCATION_DATA_PATH = f"./data/raw/city{city_idx}_location_features.csv"
+            store_csv_file(PREPROCESSED_LOCATION_DATA_PATH, preprocessed_location_data)
+            print("Finished processing location data.", flush=True)
+
+    print("\n✅ All requested processing complete.")

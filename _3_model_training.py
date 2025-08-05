@@ -165,22 +165,22 @@ def evaluate(model, loader, data, epoch, split, writer=None):
 # -------- Main with argparse -------- #
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train Temporal Graph Network for user-location link prediction.")
-    # parser.add_argument("--data_root", type=str, default="data", help="Root path for dataset")
+    parser.add_argument("--data_root", type=str, default="data", help="Root path for dataset")
     parser.add_argument("--city", type=str, default="D", help="City index for dataset")
     parser.add_argument("--epochs", type=int, default=50, help="Number of training epochs")
     parser.add_argument("--batch_size", type=int, default=200, help="Batch size for training")
     parser.add_argument("--neg_sampling_ratio", type=float, default=20.0, help="Negative sampling ratio")
     parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
-    # parser.add_argument("--memory_dim", type=int, default=100, help="Dimension of TGN memory")
-    # parser.add_argument("--time_dim", type=int, default=100, help="Dimension of time encoding")
-    # parser.add_argument("--embedding_dim", type=int, default=100, help="Dimension of final node embeddings")
-    # parser.add_argument("--neighbor_size", type=int, default=10, help="Number of recent neighbors to store")
+    parser.add_argument("--memory_dim", type=int, default=100, help="Dimension of TGN memory")
+    parser.add_argument("--time_dim", type=int, default=100, help="Dimension of time encoding")
+    parser.add_argument("--embedding_dim", type=int, default=100, help="Dimension of final node embeddings")
+    parser.add_argument("--neighbor_size", type=int, default=10, help="Number of recent neighbors to store")
     parser.add_argument("--save_path", type=str, default="./model_training_runs/best_model.pt",
                         help="Path to save the best model")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Model training on device: {device}")
+    print(f"Model training on device: {device}", flush=True)
 
     dataset = UserLocationInteractionDataset(root=args.data_root, city_idx=args.city)
     data = dataset[0].to(device)
@@ -214,12 +214,12 @@ if __name__ == "__main__":
     best_test_auc = 0
     for epoch in range(1, args.epochs + 1):
         loss = train_epoch(model, train_loader, data, optimizer, criterion, epoch, writer)
-        print(f"Epoch: {epoch:02d}, Loss: {loss:.4f}")
+        print(f"Epoch: {epoch:02d}, Loss: {loss:.4f}", flush=True)
 
         val_ap, val_auc = evaluate(model, val_loader, data, epoch, "Val", writer)
-        print(f"Val AP: {val_ap:.4f}, Val AUC: {val_auc:.4f}")
+        print(f"Val AP: {val_ap:.4f}, Val AUC: {val_auc:.4f}", flush=True)
         test_ap, test_auc = evaluate(model, test_loader, data, epoch, "Test", writer)
-        print(f"Test AP: {test_ap:.4f}, Test AUC: {test_auc:.4f}")
+        print(f"Test AP: {test_ap:.4f}, Test AUC: {test_auc:.4f}", flush=True)
 
         if test_ap > best_test_ap or test_auc > best_test_auc:
             torch.save({

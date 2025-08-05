@@ -1,6 +1,7 @@
 import pandas as pd
 import torch
 from torch_geometric.data import InMemoryDataset, TemporalData
+import argparse, json, sys
 
 
 class UserLocationInteractionDataset(InMemoryDataset):
@@ -30,6 +31,9 @@ class UserLocationInteractionDataset(InMemoryDataset):
         # exclude interpolated observation
         df = traj_data[traj_data["is_recorded"] == 1]
 
+        max_uid = df["uid"].max()
+        print(f"Max uid in filtered DataFrame: {max_uid}")
+
         # TODO: DELETE LATER
         # do not use the entire dataset, but the users to predict in cityD
         df = df[(df["uid"] >= 3000) & (df["uid"] <= 6000)]
@@ -43,17 +47,15 @@ class UserLocationInteractionDataset(InMemoryDataset):
         user_infos = []
         location_infos = []
         edge_infos = []
-        user_specific_locations = {}
 
         for uid, group in df.groupby("uid"):
             # create edges: from user to each location (uid → cell_id)
             locs = group["cell_id"].tolist()
             src.extend([uid] * len(locs))
             dst.extend(locs)
-            user_specific_locations[uid] = set(locs)
             timestamps.extend(group["timestamp"].tolist())
 
-            user_info = user_data[user_data["uid"] == uid].values.tolist()
+            user_info = user_data[user_data["uid"] == uid].drop(columns=["user_specific_locations"]).values.tolist()
             user_infos.extend(user_info * len(group))  # replicate user feature per edge
 
             location_info = (location_data[location_data["cell_id"].isin(group["cell_id"])]
@@ -84,30 +86,33 @@ class UserLocationInteractionDataset(InMemoryDataset):
 
         # build a TemporalData object
         data = TemporalData(
-            num_users=num_users,
-            num_visited_locations=num_visited_locations,
             src=src,  # [E]
             dst=dst,  # [E]
             t=timestamps,  # [E]
             user_feats=user_feats,  # [E, num_user _features]
             location_feats=location_feats,  # [E, num_location_features]
             edge_feats=edge_feats,  # [E, num_edge_features]
-            user_specific_locations=user_specific_locations
         )
 
-        torch.save(self.collate([data]), self.processed_paths[0])
+        data.num_users = num_users
+        data.num_visited_locations = num_visited_locations
+
+        torch.save((self.collate([data])), self.processed_paths[0])
 
 
 if __name__ == "__main__":
-    dataset = UserLocationInteractionDataset(root="data", city_idx="D")
+    parser = argparse.ArgumentParser(description="Preprocess data and add additional features.")
+    parser.add_argument("--city", type=str, default="D", help="City index (e.g., A, B, C, D)")
+    args = parser.parse_args()
+
+    print("=== User-Location Interaction Dataset ===", flush=True)
+    dataset = UserLocationInteractionDataset(root="data", city_idx=args.city)
     data = dataset[0]
 
     print("\n=== Sanity Checks ===")
     print(f"Total number of edges: {data.src.size(0)}")
     print(f"Unique users (src): {torch.unique(data.src).numel()}")
     print(f"Unique locations (dst): {torch.unique(data.dst).numel()}")
-    print(f"Min locations per user: {min(len(l) for l in data.user_specific_locations.values())}, "
-          f"Max locations per user: {max(len(l) for l in data.user_specific_locations.values())}")
     print(f"Timestamps shape: {data.t.shape}")
     print(f"User node features shape: {data.user_feats.shape}")
     print(f"Edge features shape: {data.edge_feats.shape}")
@@ -129,15 +134,22 @@ if __name__ == "__main__":
     import random
 
     idx = random.randint(0, data.src.size(0) - 1)
-    print(f"\n=== Random Edge [{idx}] ===")
+    print(f"\n=== Random Edge [{idx}] ===", flush=True)
     print(f"User ID (src): {data.src[idx].item()}")
     print(f"Location ID (dst): {data.dst[idx].item()}")
-    print(f"User specific locations (user_specific_locations): {data.user_specific_locations[data.src[idx].item()]}")
     print(f"Timestamp: {data.t[idx].item()}")
     print(f"User features: {data.user_feats[idx].tolist()}")
     print(f"Edge features: {data.edge_feats[idx].tolist()}")
     print(f"Location features: {data.location_feats[idx].tolist()}")
-    print(f"Message: {torch.cat(
-        [data.user_feats[idx], data.edge_feats[idx], data.location_feats[idx]], dim=-1)}")
+    print(f"Message: {torch.cat([data.user_feats[idx], data.edge_feats[idx], data.location_feats[idx]], dim=-1)}")
+
+    # Parse JSON strings in the column "user_specific_locations"
+    user_specific_locations = pd.read_csv(
+        "./data/raw/cityD_user_features.csv",
+        usecols=["uid", "user_specific_locations"]
+    )
+    user_specific_locations["user_specific_locations"] = user_specific_locations["user_specific_locations"].apply(json.loads)
+    locations = user_specific_locations.loc[user_specific_locations["uid"] == data.src[idx].item(), "user_specific_locations"]
+    print(f"User specific locations for user {data.src[idx].item()}: {locations.values[0]}")
 
     print("\n✅ All checks complete.")
