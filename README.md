@@ -44,9 +44,12 @@
 ├── 🐍 _3_model_training.py                  # Model training
 ├── 🐍 _4_predict.py                         # Model inference
 ├── 🐍 _5_evaluate.py                        # Evaluation
+├── ▶️ jobscript.sh                          # SLURM job description script
 ├── 📜 LICENSE
-├── 📘 README.md
+├── 🖼️ pyg_24.05-py3.sif                     # Apptainer (Singularity) Image based on docker://nvcr.io/nvidia/pyg:24.05-py3
+├── 📖 README.md
 ├── ⚙️ requirements.txt
+├── ▶️ run.sh                                # Shell script to run the project on DGX
 ├── 🐍 visualize_data.py                     # Custom data visualization
 └── 🐍 visualize_trajectory.py               # Custom Trajectory visualization
 ```
