@@ -6,8 +6,6 @@ from torch_geometric.data import InMemoryDataset, TemporalData
 class UserLocationInteractionDataset(InMemoryDataset):
     def __init__(self, root, city_idx, transform=None, pre_transform=None):
         self.city_idx = city_idx
-        self.num_users = 0
-        self.num_visited_locations = 0
         super().__init__(root, transform, pre_transform)
         self.data, self.slices = torch.load(self.processed_paths[0], weights_only=False)
 
@@ -21,7 +19,7 @@ class UserLocationInteractionDataset(InMemoryDataset):
     @property
     def processed_file_names(self):
         # will be saved under root/processed/
-        return [f"interaction-graph-city{self.city_idx}-small.pt"]
+        return [f"interaction-graph-city{self.city_idx}-small-no-interpolation.pt"]
 
     def process(self) -> None:
         # load the CSV into a Pandas DataFrame.
@@ -29,12 +27,15 @@ class UserLocationInteractionDataset(InMemoryDataset):
         user_data = pd.read_csv(self.raw_paths[1])
         location_data = pd.read_csv(self.raw_paths[2])
 
-        # TODO: DELETE LATER
-        df = traj_data[(traj_data["uid"] >= 3000) & (
-                    traj_data["uid"] <= 6000)]  # do not use the entire dataset, but the users to predict in cityD
+        # exclude interpolated observation
+        df = traj_data[traj_data["is_recorded"] == 1]
 
-        self.num_users = df["uid"].nunique()
-        self.num_visited_locations = df["cell_id"].nunique()
+        # TODO: DELETE LATER
+        # do not use the entire dataset, but the users to predict in cityD
+        df = df[(df["uid"] >= 3000) & (df["uid"] <= 6000)]
+
+        num_users = df["uid"].nunique()
+        num_visited_locations = df["cell_id"].nunique()
 
         src = []  # user nodes
         dst = []  # location nodes
@@ -42,11 +43,14 @@ class UserLocationInteractionDataset(InMemoryDataset):
         user_infos = []
         location_infos = []
         edge_infos = []
+        user_specific_locations = {}
 
         for uid, group in df.groupby("uid"):
             # create edges: from user to each location (uid → cell_id)
-            src.extend([uid] * len(group))
-            dst.extend(group["cell_id"].tolist())
+            locs = group["cell_id"].tolist()
+            src.extend([uid] * len(locs))
+            dst.extend(locs)
+            user_specific_locations[uid] = set(locs)
             timestamps.extend(group["timestamp"].tolist())
 
             user_info = user_data[user_data["uid"] == uid].values.tolist()
@@ -80,12 +84,15 @@ class UserLocationInteractionDataset(InMemoryDataset):
 
         # build a TemporalData object
         data = TemporalData(
+            num_users=num_users,
+            num_visited_locations=num_visited_locations,
             src=src,  # [E]
             dst=dst,  # [E]
             t=timestamps,  # [E]
             user_feats=user_feats,  # [E, num_user _features]
             location_feats=location_feats,  # [E, num_location_features]
             edge_feats=edge_feats,  # [E, num_edge_features]
+            user_specific_locations=user_specific_locations
         )
 
         torch.save(self.collate([data]), self.processed_paths[0])
@@ -99,6 +106,8 @@ if __name__ == "__main__":
     print(f"Total number of edges: {data.src.size(0)}")
     print(f"Unique users (src): {torch.unique(data.src).numel()}")
     print(f"Unique locations (dst): {torch.unique(data.dst).numel()}")
+    print(f"Min locations per user: {min(len(l) for l in data.user_specific_locations.values())}, "
+          f"Max locations per user: {max(len(l) for l in data.user_specific_locations.values())}")
     print(f"Timestamps shape: {data.t.shape}")
     print(f"User node features shape: {data.user_feats.shape}")
     print(f"Edge features shape: {data.edge_feats.shape}")
@@ -123,6 +132,7 @@ if __name__ == "__main__":
     print(f"\n=== Random Edge [{idx}] ===")
     print(f"User ID (src): {data.src[idx].item()}")
     print(f"Location ID (dst): {data.dst[idx].item()}")
+    print(f"User specific locations (user_specific_locations): {data.user_specific_locations[data.src[idx].item()]}")
     print(f"Timestamp: {data.t[idx].item()}")
     print(f"User features: {data.user_feats[idx].tolist()}")
     print(f"Edge features: {data.edge_feats[idx].tolist()}")
