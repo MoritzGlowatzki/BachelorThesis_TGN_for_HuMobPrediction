@@ -174,6 +174,8 @@ if __name__ == "__main__":
     parser.add_argument("--data_root", type=str, default="data", help="Root path for dataset")
     parser.add_argument("--city", type=str, default="D", help="City index for dataset")
     parser.add_argument("--epochs", type=int, default=50, help="Number of training epochs")
+    parser.add_argument("--patience", type=int, default=5,
+                        help="Number of epochs to wait without improvement before stopping.")
     parser.add_argument("--batch_size", type=int, default=200, help="Batch size for training")
     parser.add_argument("--neg_sampling_ratio", type=float, default=20.0, help="Negative sampling ratio")
     parser.add_argument("--lr", type=float, default=0.0001, help="Learning rate")
@@ -218,6 +220,7 @@ if __name__ == "__main__":
 
     best_test_ap = 0
     best_test_auc = 0
+    no_improve_epochs = 0
     for epoch in range(1, args.epochs + 1):
         loss = train_epoch(model, train_loader, data, optimizer, criterion, epoch, writer)
         print(f"Epoch: {epoch:02d}, Loss: {loss:.4f}", flush=True)
@@ -228,6 +231,7 @@ if __name__ == "__main__":
         print(f"Test AP: {test_ap:.4f}, Test AUC: {test_auc:.4f}", flush=True)
 
         if test_ap > best_test_ap or test_auc > best_test_auc:
+            no_improve_epochs = 0
             torch.save({
                 "memory_state": model.memory.state_dict(),
                 "gnn_state": model.gnn.state_dict(),
@@ -239,6 +243,12 @@ if __name__ == "__main__":
             }, args.save_path)
             best_test_ap = test_ap
             best_test_auc = test_auc
+
+        else:
+            no_improve_epochs += 1
+            if no_improve_epochs >= args.patience:
+                print(f"No improvement for {args.patience} epochs. Early stopping at epoch {epoch}.")
+                break
 
     torch.save({
         "memory_state": model.memory.state_dict(),
