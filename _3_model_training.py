@@ -102,11 +102,15 @@ class TGNModel(torch.nn.Module):
 
 # -------- Training Functions -------- #
 def train_epoch(model, train_loader, data, optimizer, criterion, epoch, writer=None):
-    model.train()
-    model.reset_state()
+    model.memory.train()
+    model.gnn.train()
+    model.link_pred.train()
+
+    model.memory.reset_state()  # Start with a fresh memory.
+    model.neighbor_loader.reset_state()  # Start with an empty graph.
+
     total_loss = 0
     total_events = 0
-
     for batch in train_loader:
         optimizer.zero_grad()
         batch = batch.to(model.device)
@@ -135,11 +139,13 @@ def train_epoch(model, train_loader, data, optimizer, criterion, epoch, writer=N
 
 @torch.no_grad()
 def evaluate(model, loader, data, epoch, split, writer=None):
-    model.eval()
-    model.reset_state()
-    torch.manual_seed(12345)
-    aps, aucs = [], []
+    model.memory.eval()
+    model.gnn.eval()
+    model.link_pred.eval()
 
+    torch.manual_seed(12345)  # Ensure deterministic sampling across epochs.
+
+    aps, aucs = [], []
     for batch in loader:
         batch = batch.to(model.device)
         z = model.compute_embeddings(batch, data)
@@ -170,7 +176,7 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", type=int, default=50, help="Number of training epochs")
     parser.add_argument("--batch_size", type=int, default=200, help="Batch size for training")
     parser.add_argument("--neg_sampling_ratio", type=float, default=20.0, help="Negative sampling ratio")
-    parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
+    parser.add_argument("--lr", type=float, default=0.0001, help="Learning rate")
     parser.add_argument("--memory_dim", type=int, default=100, help="Dimension of TGN memory")
     parser.add_argument("--time_dim", type=int, default=100, help="Dimension of time encoding")
     parser.add_argument("--embedding_dim", type=int, default=100, help="Dimension of final node embeddings")
@@ -233,5 +239,14 @@ if __name__ == "__main__":
             }, args.save_path)
             best_test_ap = test_ap
             best_test_auc = test_auc
+
+    torch.save({
+        "memory_state": model.memory.state_dict(),
+        "gnn_state": model.gnn.state_dict(),
+        "pred_state": model.link_pred.state_dict(),
+        "memory_buffer": model.memory.memory.clone(),
+        "last_update": model.memory.last_update.clone(),
+        "neighbor_dict": model.neighbor_loader.neighbors.clone(),
+    }, "./model_training_runs/last_model_D_50.pt")
 
     writer.close()

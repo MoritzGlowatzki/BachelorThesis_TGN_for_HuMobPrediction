@@ -1,5 +1,10 @@
+/__pycache__/
 /.idea/
+/.cache/
 /data/
 /output/
 /model_training_runs/
 /prediction/
+/dgx_output/
+
+pyg_24.05-py3.sif

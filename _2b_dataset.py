@@ -8,7 +8,9 @@ class UserLocationInteractionDataset(InMemoryDataset):
     def __init__(self, root, city_idx, transform=None, pre_transform=None):
         self.city_idx = city_idx
         super().__init__(root, transform, pre_transform)
-        self.data, self.slices = torch.load(self.processed_paths[0], weights_only=False)
+        (self.data, self.slices), metadata = torch.load(self.processed_paths[0], weights_only=False)
+        self.num_users = metadata["num_users"]
+        self.num_visited_locations = metadata["num_visited_locations"]
 
     @property
     def raw_file_names(self):
@@ -30,9 +32,6 @@ class UserLocationInteractionDataset(InMemoryDataset):
 
         # exclude interpolated observation
         df = traj_data[traj_data["is_recorded"] == 1]
-
-        max_uid = df["uid"].max()
-        print(f"Max uid in filtered DataFrame: {max_uid}")
 
         # TODO: DELETE LATER
         # do not use the entire dataset, but the users to predict in cityD
@@ -94,10 +93,7 @@ class UserLocationInteractionDataset(InMemoryDataset):
             edge_feats=edge_feats,  # [E, num_edge_features]
         )
 
-        data.num_users = num_users
-        data.num_visited_locations = num_visited_locations
-
-        torch.save((self.collate([data])), self.processed_paths[0])
+        torch.save(((self.collate([data])), {"num_users": num_users, "num_visited_locations": num_visited_locations}), self.processed_paths[0])
 
 
 if __name__ == "__main__":
@@ -108,6 +104,9 @@ if __name__ == "__main__":
     print("=== User-Location Interaction Dataset ===", flush=True)
     dataset = UserLocationInteractionDataset(root="data", city_idx=args.city)
     data = dataset[0]
+
+    print(f"Number of users: {dataset.num_users}")
+    print(f"Number of nodes: {dataset.num_visited_locations}")
 
     print("\n=== Sanity Checks ===")
     print(f"Total number of edges: {data.src.size(0)}")
