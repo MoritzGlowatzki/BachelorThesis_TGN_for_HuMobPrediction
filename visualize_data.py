@@ -14,10 +14,11 @@ from visualize_trajectory import (create_single_trajectory_gif, create_combined_
 
 # -------- Preliminaries -------- #
 DATA_PATHS = {
-    "A": "./data/original/cityA-dataset.csv",
-    "B": "./data/original/cityB-dataset.csv",
-    "C": "./data/original/cityC-dataset.csv",
-    "D": "./data/original/cityD-dataset.csv",
+    "A": "./data/dataset_humob_2024/full_city_data/cityA-dataset.csv",
+    "B": "./data/dataset_humob_2024/full_city_data/cityB-dataset.csv",
+    "C": "./data/dataset_humob_2024/full_city_data/cityC-dataset.csv",
+    "D": "./data/dataset_humob_2024/full_city_data/cityD-dataset.csv",
+    "result": "./data/result/cityD_final_comparison.csv"
 }
 
 def plot_daily_data_records_per_city():
@@ -88,8 +89,8 @@ def plot_avg_data_records_per_hour_per_city():
     plt.show()
 
 
-def plot_gravitational_centres_for_single_user(dataset_index, uid, city_id):
-    original_data = load_csv_file(DATA_PATHS[dataset_index])
+def plot_gravitational_centres_for_single_user(city_id, uid):
+    original_data = load_csv_file(DATA_PATHS[city_id])
     data = original_data[(original_data["uid"] == uid)][["x", "y", "t", "d"]]
 
     combinations = [(True, True), (True, False), (False, True)]
@@ -242,6 +243,7 @@ def visualize_single_trajectory(dataset_index, uid, day, mode: Literal["real", "
 
 def compare_real_and_predicted_trajectory(dataset_index, uid, day, animated: bool):
     data = load_csv_file(DATA_PATHS[dataset_index])
+    data = data.rename(columns={"x_true": "x", "y_true": "y"})
     filtered_data = data[(data["uid"] == uid) & (data["d"] == day)]
     if animated:
         create_combined_trajectory_gif(filtered_data)
@@ -260,10 +262,11 @@ if __name__ == "__main__":
     # plot_avg_data_records_per_hour_per_city()
     # for i in tqdm(range(0, 3), total=3):
     #     plot_gravitational_centres_for_single_user("A", i)
-    plot_gravitational_centres_for_single_user("A", 0, "A")
+    # plot_gravitational_centres_for_single_user("A", 0)
     # plot_gravitational_centres_for_single_user("A", 14959)
     # plot_gravitational_centres_for_single_user("A", 26176)
     # plot_gravitational_centres_for_single_user("A", 60369)
+    plot_gravitational_centres_for_single_user("D", 3000)
     # plot_gravitational_centres_all_cities()
     # for i in tqdm(range(0, 3), total=3):
         # visualize_single_trajectory("A-small", 0, i, "real", True)
@@ -272,3 +275,4 @@ if __name__ == "__main__":
         # compare_real_and_predicted_trajectory("Test", 0, i, False)
     # visualize_multiday_user_trajectory("B", 1)
     # visualize_single_trajectory("B", 1, 0, "real", False)
+    # compare_real_and_predicted_trajectory("result", 3000, 74, False)
