@@ -1,7 +1,9 @@
+import argparse
+import json
+import os
+
 import numpy as np
 from tqdm import tqdm
-import argparse, json, os, sys
-
 
 from _1_data_IO import *
 
@@ -12,6 +14,13 @@ def check_for_new_cells_after_day_60(city_idx):
     RAW_FULL_DATA_PATH = f"./data/dataset_humob_2024/full_city_data/city{city_idx}-dataset.csv"
     df = load_csv_file(RAW_FULL_DATA_PATH)
 
+    if city_idx == "B":
+        df = df[(df["uid"] >= 22000) & (df["uid"] < 25000)]
+    elif city_idx == "C":
+        df = df[(df["uid"] >= 17000) & (df["uid"] < 20000)]
+    elif city_idx == "D":
+        df = df[(df["uid"] >= 3000) & (df["uid"] < 6000)]
+
     visited_before = set(map(tuple, df.loc[df["d"] < 60, ["x", "y"]].values))
     visited_after = set(map(tuple, df.loc[df["d"] >= 60, ["x", "y"]].values))
     new_cells_after_60 = visited_after.difference(visited_before)
@@ -21,7 +30,6 @@ def check_for_new_cells_after_day_60(city_idx):
             f"{len(new_cells_after_60)} out of {total_visited} cells in city {city_idx} visited after day 60 were new (not seen before).")
     else:
         print(f"No new cells visited in city {city_idx} after day 60 — all were already seen before.")
-
 
 def total_num_of_records():
     total_num_of_records = 0
