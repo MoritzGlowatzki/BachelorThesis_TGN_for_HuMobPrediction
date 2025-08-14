@@ -176,8 +176,9 @@ def evaluate(model, loader, data, epoch, split, writer=None):
 # -------- Main with argparse -------- #
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train Temporal Graph Network for user-location link prediction.")
-    parser.add_argument("--data_root", type=str, default="data", help="Root path for dataset")
     parser.add_argument("--city", type=str, default="D", help="City index for dataset")
+    parser.add_argument("--interpol", type=bool, default=True, help="Interpolation Yes/No")
+    parser.add_argument("--small", type=bool, default=True, help="Only use users that will be predicted later")
     parser.add_argument("--epochs", type=int, default=50, help="Number of training epochs")
     parser.add_argument("--patience", type=int, default=10,
                         help="Number of epochs to wait without improvement before stopping.")
@@ -188,14 +189,12 @@ if __name__ == "__main__":
     parser.add_argument("--time_dim", type=int, default=100, help="Dimension of time encoding")
     parser.add_argument("--embedding_dim", type=int, default=100, help="Dimension of final node embeddings")
     parser.add_argument("--neighbor_size", type=int, default=10, help="Number of recent neighbors to store")
-    parser.add_argument("--save_path", type=str, default="./model_training_runs/best_model.pt",
-                        help="Path to save the best model")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Model training on device: {device}", flush=True)
 
-    dataset = UserLocationInteractionDataset(root=args.data_root, city_idx=args.city)
+    dataset = UserLocationInteractionDataset(root="data", city_idx=args.city, interpol=args.interpol, small=args.small)
     data = dataset[0].to(device)
 
     train_data, val_data, test_data = data.train_val_test_split(val_ratio=0.15, test_ratio=0.15)
@@ -246,7 +245,7 @@ if __name__ == "__main__":
                 "neighbor_dict": model.neighbor_loader.neighbors.clone(),
                 "assoc": model.assoc.clone(),
                 "epoch": epoch
-            }, args.save_path)
+            }, f"./model_training_runs/city{args.city}/best_model_{args.epochs}_on_{args.city}_{args.interpol}_{args.small}.pt")
             best_test_ap = test_ap
             best_test_auc = test_auc
 
@@ -264,6 +263,6 @@ if __name__ == "__main__":
         "last_update": model.memory.last_update.clone(),
         "neighbor_dict": model.neighbor_loader.neighbors.clone(),
         "assoc": model.assoc.clone(),
-    }, "./model_training_runs/last_model_D_50.pt")
+    }, f"./model_training_runs/city{args.city}/last_model_{args.epochs}_on_{args.city}_{args.interpol}_{args.small}.pt")
 
     writer.close()
