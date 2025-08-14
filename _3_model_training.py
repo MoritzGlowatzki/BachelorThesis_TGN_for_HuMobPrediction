@@ -91,6 +91,11 @@ class TGNModel(torch.nn.Module):
             return pos_out, neg_out
         return pos_out, None
 
+    def predict_inference_scores_for_single_user(self, z, src, candidate_dst, t):
+        t = t.repeat_interleave(candidate_dst.size(0))
+        scores = self.link_pred(z[self.assoc[src]], z[self.assoc[candidate_dst]], t)
+        return scores
+
     def update_states(self, src, dst, t, user_feats, edge_feats, location_feats):
         msg = self.concatenate_message(user_feats, edge_feats, location_feats)
         self.memory.update_state(src, dst, t, msg)
@@ -174,7 +179,7 @@ if __name__ == "__main__":
     parser.add_argument("--data_root", type=str, default="data", help="Root path for dataset")
     parser.add_argument("--city", type=str, default="D", help="City index for dataset")
     parser.add_argument("--epochs", type=int, default=50, help="Number of training epochs")
-    parser.add_argument("--patience", type=int, default=5,
+    parser.add_argument("--patience", type=int, default=10,
                         help="Number of epochs to wait without improvement before stopping.")
     parser.add_argument("--batch_size", type=int, default=200, help="Batch size for training")
     parser.add_argument("--neg_sampling_ratio", type=float, default=20.0, help="Negative sampling ratio")
@@ -239,6 +244,7 @@ if __name__ == "__main__":
                 "memory_buffer": model.memory.memory.clone(),
                 "last_update": model.memory.last_update.clone(),
                 "neighbor_dict": model.neighbor_loader.neighbors.clone(),
+                "assoc": model.assoc.clone(),
                 "epoch": epoch
             }, args.save_path)
             best_test_ap = test_ap
@@ -257,6 +263,7 @@ if __name__ == "__main__":
         "memory_buffer": model.memory.memory.clone(),
         "last_update": model.memory.last_update.clone(),
         "neighbor_dict": model.neighbor_loader.neighbors.clone(),
+        "assoc": model.assoc.clone(),
     }, "./model_training_runs/last_model_D_50.pt")
 
     writer.close()
