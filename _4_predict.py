@@ -201,13 +201,13 @@ def find_location_feats(location_data, cell_ids):
 
 
 # -------- Main Inference Pipeline -------- #
-def run_inference(raw_prediction_data, city_id):
+def run_inference(raw_prediction_data, city_id, small, interpol, model_path):
     # 1) DEVICE CONFIGURATION
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Inference running on device: {device}")
 
     # 2) LOAD DATA (and move it onto device)
-    dataset = UserLocationInteractionDataset(root="data", city_idx=city_id)
+    dataset = UserLocationInteractionDataset(root="data", city_idx=city_id, small=small, interpol=interpol)
     data = dataset[0].to(device)
     print(f"Number of users: {dataset.num_users}")
     print(f"Number of visited locations: {dataset.num_visited_locations}")
@@ -224,7 +224,7 @@ def run_inference(raw_prediction_data, city_id):
     )
 
     # 4) LOAD CHECKPOINT (weights and final memory & neighbor state)
-    checkpoint = torch.load("./model_training_runs/last_model_small-D_50_interpol_with_assoc.pt", map_location=device)
+    checkpoint = torch.load(args.model_path, map_location=device)
     model.memory.load_state_dict(checkpoint["memory_state"])
     model.gnn.load_state_dict(checkpoint["gnn_state"])
     model.link_pred.load_state_dict(checkpoint["pred_state"])
@@ -237,7 +237,6 @@ def run_inference(raw_prediction_data, city_id):
     model.memory.eval()
     model.gnn.eval()
     model.link_pred.eval()
-    # model.reset_state()
 
     # 6) Create DataLoader for BatchedPredictionDataset
     num_users_during_training = int(data.src.max())
@@ -340,12 +339,20 @@ def batch_predict_next_locations(model, loader, data, prediction_data, user_data
 
 
 if __name__ == "__main__":
-    for city_idx in ["D"]:
-        RAW_PREDICTION_DATA_PATH = f"./data/raw/city{city_idx}_prediction_data.csv"
-        raw_prediction_data = load_csv_file(RAW_PREDICTION_DATA_PATH)
+    parser = argparse.ArgumentParser(description="Preprocess data and add additional features.")
+    parser.add_argument("--city", type=str, default="D", help="City index (e.g., A, B, C, D)")
+    parser.add_argument("--small", type=bool, default=True, help="Only use users that will be predicted later")
+    parser.add_argument("--interpol", type=bool, default=True, help="Interpolation Yes/No")
+    parser.add_argument("--model_path", type=str, default="./model_training_runs/last_model_small-D_50_interpol.pt",
+                        help="Path to the model's checkpoint file")
+    args = parser.parse_args()
 
-        print(f"There are {len(raw_prediction_data)} predictions to make!")
-        final_result = run_inference(raw_prediction_data, city_idx)
 
-        PREDICTION_RESULT_DATA_PATH = f"./data/result/city{city_idx}_prediction_result.csv"
-        store_csv_file(PREDICTION_RESULT_DATA_PATH, final_result)
+    RAW_PREDICTION_DATA_PATH = f"./data/raw/city{args.city}_prediction_data.csv"
+    raw_prediction_data = load_csv_file(RAW_PREDICTION_DATA_PATH)
+
+    print(f"There are {len(raw_prediction_data)} predictions to make!")
+    final_result = run_inference(raw_prediction_data, args.city, args.small, args.interpol, args.model_path)
+
+    PREDICTION_RESULT_DATA_PATH = f"./data/result/city{city_idx}_prediction_result.csv"
+    store_csv_file(PREDICTION_RESULT_DATA_PATH, final_result)
