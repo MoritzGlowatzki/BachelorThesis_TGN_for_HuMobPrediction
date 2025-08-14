@@ -5,8 +5,10 @@ import argparse, json, sys
 
 
 class UserLocationInteractionDataset(InMemoryDataset):
-    def __init__(self, root, city_idx, transform=None, pre_transform=None):
+    def __init__(self, root, city_idx, interpol, small, transform=None, pre_transform=None):
         self.city_idx = city_idx
+        self.interpol = interpol
+        self.small = small
         super().__init__(root, transform, pre_transform)
         (self.data, self.slices), metadata = torch.load(self.processed_paths[0], weights_only=False)
         self.num_users = metadata["num_users"]
@@ -22,7 +24,7 @@ class UserLocationInteractionDataset(InMemoryDataset):
     @property
     def processed_file_names(self):
         # will be saved under root/processed/
-        return [f"interaction-graph-city{self.city_idx}-small-no-interpolation.pt"]
+        return [f"interaction-graph-city{self.city_idx}-{'small' if self.small else 'full'}-{'no_interpolation' if not self.interpol else 'with_interpolation'}.pt"]
 
     def process(self) -> None:
         # load the CSV into a Pandas DataFrame.
@@ -30,12 +32,20 @@ class UserLocationInteractionDataset(InMemoryDataset):
         user_data = pd.read_csv(self.raw_paths[1])
         location_data = pd.read_csv(self.raw_paths[2])
 
-        # exclude interpolated observation
-        df = traj_data[traj_data["is_recorded"] == 1]
+        # exclude interpolated observations?
+        if not self.interpol:
+            df = traj_data[traj_data["is_recorded"] == 1]
+        else:
+            df = traj_data
 
-        # TODO: DELETE LATER
-        # do not use the entire dataset, but the users to predict in cityD
-        df = df[(df["uid"] >= 3000) & (df["uid"] <= 6000)]
+        # only use users that will be predicted later ?
+        if self.small:
+            if self.city_idx == "B":
+                df = df[(df["uid"] >= 22000) & (df["uid"] < 25000)]
+            if self.city_idx == "C":
+                df = df[(df["uid"] >= 17000) & (df["uid"] < 20000)]
+            if self.city_idx == "D":
+                df = df[(df["uid"] >= 3000) & (df["uid"] < 6000)]
 
         num_users = df["uid"].nunique()
         num_visited_locations = df["cell_id"].nunique()
@@ -58,10 +68,10 @@ class UserLocationInteractionDataset(InMemoryDataset):
             user_infos.extend(user_info * len(group))  # replicate user feature per edge
 
             location_info = (location_data[location_data["cell_id"].isin(group["cell_id"])]
-                             .set_index("cell_id")
-                             .loc[group["cell_id"]]
-                             .reset_index()
-                             .values.tolist())
+                            .set_index("cell_id")
+                            .loc[group["cell_id"]]
+                            .reset_index()
+                            .values.tolist())
             location_infos.extend(location_info)
 
             edge_infos.extend(
@@ -99,14 +109,16 @@ class UserLocationInteractionDataset(InMemoryDataset):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Preprocess data and add additional features.")
     parser.add_argument("--city", type=str, default="D", help="City index (e.g., A, B, C, D)")
+    parser.add_argument("--small", type=bool, default=True, help="Only use users that will be predicted later")
+    parser.add_argument("--interpol", type=bool, default=True, help="Interpolation Yes/No")
     args = parser.parse_args()
 
     print("=== User-Location Interaction Dataset ===", flush=True)
-    dataset = UserLocationInteractionDataset(root="data", city_idx=args.city)
+    dataset = UserLocationInteractionDataset(root="data", city_idx=args.city, interpol=args.interpol, small=args.small)
     data = dataset[0]
 
     print(f"Number of users: {dataset.num_users}")
-    print(f"Number of nodes: {dataset.num_visited_locations}")
+    print(f"Number of visited locations: {dataset.num_visited_locations}")
 
     print("\n=== Sanity Checks ===")
     print(f"Total number of edges: {data.src.size(0)}")
