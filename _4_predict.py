@@ -1,3 +1,4 @@
+import argparse
 import ast
 
 import numpy as np
@@ -201,13 +202,13 @@ def find_location_feats(location_data, cell_ids):
 
 
 # -------- Main Inference Pipeline -------- #
-def run_inference(raw_prediction_data, city_id, small, interpol, model_path):
+def run_inference(raw_prediction_data, city_idx, small, interpol, model_path):
     # 1) DEVICE CONFIGURATION
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Inference running on device: {device}")
 
     # 2) LOAD DATA (and move it onto device)
-    dataset = UserLocationInteractionDataset(root="data", city_idx=city_id, small=small, interpol=interpol)
+    dataset = UserLocationInteractionDataset(root="data", city_idx=city_idx, small=small, interpol=interpol)
     data = dataset[0].to(device)
     print(f"Number of users: {dataset.num_users}")
     print(f"Number of visited locations: {dataset.num_visited_locations}")
@@ -240,7 +241,8 @@ def run_inference(raw_prediction_data, city_id, small, interpol, model_path):
 
     # 6) Create DataLoader for BatchedPredictionDataset
     num_users_during_training = int(data.src.max())
-    pred_data = TimestampBatchedPredictionDataset(city_idx=city_id, num_users_during_training=num_users_during_training)
+    pred_data = TimestampBatchedPredictionDataset(city_idx=city_idx,
+                                                  num_users_during_training=num_users_during_training)
     pred_loader = TemporalDataLoader(pred_data, batch_size=1, shuffle=False)
 
     # 7) Load auxiliary information
@@ -354,5 +356,5 @@ if __name__ == "__main__":
     print(f"There are {len(raw_prediction_data)} predictions to make!")
     final_result = run_inference(raw_prediction_data, args.city, args.small, args.interpol, args.model_path)
 
-    PREDICTION_RESULT_DATA_PATH = f"./data/result/city{city_idx}_prediction_result.csv"
+    PREDICTION_RESULT_DATA_PATH = f"./data/result/city{args.city}_prediction_result.csv"
     store_csv_file(PREDICTION_RESULT_DATA_PATH, final_result)
