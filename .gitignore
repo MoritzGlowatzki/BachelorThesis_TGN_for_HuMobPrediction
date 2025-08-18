@@ -1,5 +1,6 @@
 /__pycache__/
 /.idea/
+/.local/
 /.cache/
 /data/
 /output/
