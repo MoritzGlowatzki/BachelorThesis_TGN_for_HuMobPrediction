@@ -4,6 +4,7 @@ import ast
 import numpy as np
 import pandas as pd
 import torch
+from sklearn.metrics import average_precision_score, roc_auc_score
 from torch.utils.data import Dataset
 from torch_geometric.data import TemporalData
 from torch_geometric.loader import TemporalDataLoader
@@ -202,16 +203,16 @@ def find_location_feats(location_data, cell_ids):
 
 
 # -------- Main Inference Pipeline -------- #
-def run_inference(raw_prediction_data, city_idx, small, interpol, model_path):
+def run_inference(raw_prediction_data, city_idx, small, interpol, model_name, feats):
     # 1) DEVICE CONFIGURATION
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Inference running on device: {device}")
+    print(f"Inference running on device: {device}", flush=True)
 
     # 2) LOAD DATA (and move it onto device)
-    dataset = UserLocationInteractionDataset(root="data", city_idx=city_idx, small=small, interpol=interpol)
+    dataset = UserLocationInteractionDataset(root="data", city_idx=city_idx, small=small, interpol=interpol, feats=feats)
     data = dataset[0].to(device)
-    print(f"Number of users: {dataset.num_users}")
-    print(f"Number of visited locations: {dataset.num_visited_locations}")
+    print(f"Number of users: {dataset.num_users}", flush=True)
+    print(f"Number of visited locations: {dataset.num_visited_locations}", flush=True)
 
     # 3) RE-INSTANTIATE MODEL (matching training hyperparameters)
     model = TGNModel(
@@ -225,14 +226,17 @@ def run_inference(raw_prediction_data, city_idx, small, interpol, model_path):
     )
 
     # 4) LOAD CHECKPOINT (weights and final memory & neighbor state)
-    checkpoint = torch.load(args.model_path, map_location=device)
+    checkpoint = torch.load(f"./model_training_runs/{model_name}.pt", map_location=device)
     model.memory.load_state_dict(checkpoint["memory_state"])
     model.gnn.load_state_dict(checkpoint["gnn_state"])
     model.link_pred.load_state_dict(checkpoint["pred_state"])
     model.memory.memory = checkpoint["memory_buffer"].to(device)
     model.memory.last_update = checkpoint["last_update"].to(device)
     model.neighbor_loader.neighbors = checkpoint["neighbor_dict"].to(device)
-    model.assoc = checkpoint["assoc"].to(device)
+    # model.assoc = checkpoint["assoc"].to(device)
+
+    if "epoch" in checkpoint:
+       print(f"Loaded model from epoch {checkpoint['epoch']}", flush=True)
 
     # 5) PUT MODEL INTO EVALUATION MODE
     model.memory.eval()
@@ -246,11 +250,11 @@ def run_inference(raw_prediction_data, city_idx, small, interpol, model_path):
     pred_loader = TemporalDataLoader(pred_data, batch_size=1, shuffle=False)
 
     # 7) Load auxiliary information
-    print("Start loading auxiliary data ...")
+    print("Start loading auxiliary data ...", flush=True)
     user_data = load_csv_file(f"./data/raw/city{city_idx}_user_features.csv")
     location_data = load_csv_file(f"./data/raw/city{city_idx}_location_features.csv")
     traj_data = load_csv_file(f"./data/raw/city{city_idx}_trajectory_data.csv")
-    print("Finished loading auxiliary data successfully!")
+    print("Finished loading auxiliary data successfully!", flush=True)
 
     idx = traj_data.groupby("uid")["timestamp"].idxmax()
     last_records = traj_data.loc[idx]
@@ -271,6 +275,11 @@ def batch_predict_next_locations(model, loader, data, prediction_data, user_data
     final_results = prediction_data.copy()
     final_results.set_index(["uid", "d", "t"], inplace=True, drop=False)
 
+    # TRUE_DATA_PATH = "./data/dataset_humob_2024/full_city_data/cityD-dataset.csv"
+    # ground_truth = load_csv_file(TRUE_DATA_PATH)
+    # ground_truth["cell_id"] = (ground_truth["x"] + (ground_truth["y"] - 1) * 200).astype(int)
+    # aps, aucs = [], []
+
     for batch in tqdm(loader, desc="Processing batches"):
         batch = batch.to(model.device)
 
@@ -280,7 +289,6 @@ def batch_predict_next_locations(model, loader, data, prediction_data, user_data
         all_src = []
         all_dst = []
         all_t = []
-
         for uid in batch.src.unique():
             user_mask = batch.src == uid  # find indices in src that belong to this user by creating a mask
 
@@ -314,6 +322,24 @@ def batch_predict_next_locations(model, loader, data, prediction_data, user_data
             # copy the tensor to CPU memory
             uid = uid.cpu().item()
 
+            # # Determine if ground truth is in candidate set
+            # true_location = ground_truth.loc[(ground_truth["uid"] == uid) & (ground_truth["d"] == d) & (ground_truth["t"] == t), "cell_id"].iloc[0]
+            # candidate_locations = candidate_location_tensor.cpu().tolist()
+            # if true_location in candidate_locations:
+            #     # Positive index
+            #     pos_out = scores[candidate_locations == true_location]
+            #     # Negatives are all other candidates
+            #     neg_out = scores[candidate_locations != true_location]
+            #     y_pred = torch.cat([pos_out, neg_out], dim=0).sigmoid().cpu()
+            #     y_true = torch.cat([torch.ones(pos_out.size(0)), torch.zeros(neg_out.size(0))], dim=0)
+
+            #     aps.append(average_precision_score(y_true, y_pred))
+            #     aucs.append(roc_auc_score(y_true, y_pred))
+            # else:
+            #     # Ground truth not in candidates => model cannot predict, assign 0
+            #     aps.append(0.0)
+            #     aucs.append(0.0)
+
             # write predictions in the final dataframe (uid, d, t, x, y)
             final_results.at[(uid, d, t), "x"] = x
             final_results.at[(uid, d, t), "y"] = y
@@ -337,16 +363,23 @@ def batch_predict_next_locations(model, loader, data, prediction_data, user_data
         model.update_states(batch_for_update.src, batch_for_update.dst, batch_for_update.t,
                             batch_for_update.user_feats, batch_for_update.edge_feats, batch_for_update.location_feats)
 
+
+    # mean_ap = float(torch.tensor(aps).mean())
+    # mean_auc = float(torch.tensor(aucs).mean())
+
+    # print(f"Mean Average Precision (AP): {mean_ap:.4f}")
+    # print(f"Mean Area Under Curve (AUC): {mean_auc:.4f}")
+
     return final_results
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Preprocess data and add additional features.")
     parser.add_argument("--city", type=str, default="D", help="City index (e.g., A, B, C, D)")
-    parser.add_argument("--small", type=bool, default=True, help="Only use users that will be predicted later")
+    parser.add_argument("--small", type=bool, default=False, help="Only use users that will be predicted later")
     parser.add_argument("--interpol", type=bool, default=True, help="Interpolation Yes/No")
-    parser.add_argument("--model_path", type=str, default="./model_training_runs/last_model_small-D_50_interpol.pt",
-                        help="Path to the model's checkpoint file")
+    parser.add_argument("--feats", type=bool, default=True, help="Include features Yes/No")
+    parser.add_argument("--model", type=str, default="last_model_D_50", help="Used model")
     args = parser.parse_args()
 
 
@@ -354,7 +387,7 @@ if __name__ == "__main__":
     raw_prediction_data = load_csv_file(RAW_PREDICTION_DATA_PATH)
 
     print(f"There are {len(raw_prediction_data)} predictions to make!")
-    final_result = run_inference(raw_prediction_data, args.city, args.small, args.interpol, args.model_path)
-
-    PREDICTION_RESULT_DATA_PATH = f"./data/result/city{args.city}_prediction_result.csv"
+    final_result = run_inference(raw_prediction_data, args.city, args.small, args.interpol, args.model, args.feats)
+    
+    PREDICTION_RESULT_DATA_PATH = f"./data/result/city{args.city}_prediction_result_{args.model}.csv"
     store_csv_file(PREDICTION_RESULT_DATA_PATH, final_result)
