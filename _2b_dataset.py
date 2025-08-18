@@ -5,10 +5,11 @@ import argparse, json, sys
 
 
 class UserLocationInteractionDataset(InMemoryDataset):
-    def __init__(self, root, city_idx, interpol, small, transform=None, pre_transform=None):
+    def __init__(self, root, city_idx, interpol, small, feats, transform=None, pre_transform=None):
         self.city_idx = city_idx
         self.interpol = interpol
         self.small = small
+        self.feats = feats
         super().__init__(root, transform, pre_transform)
         (self.data, self.slices), metadata = torch.load(self.processed_paths[0], weights_only=False)
         self.num_users = metadata["num_users"]
@@ -24,7 +25,7 @@ class UserLocationInteractionDataset(InMemoryDataset):
     @property
     def processed_file_names(self):
         # will be saved under root/processed/
-        return [f"interaction-graph-city{self.city_idx}-{'small' if self.small else 'full'}-{'no_interpolation' if not self.interpol else 'with_interpolation'}.pt"]
+        return [f"interaction-graph-city{self.city_idx}-{'small' if self.small else 'full'}{'-no-interpolation' if not self.interpol else ''}{'-no-feats' if not self.feats else ''}.pt"]
 
     def process(self) -> None:
         # load the CSV into a Pandas DataFrame.
@@ -82,9 +83,15 @@ class UserLocationInteractionDataset(InMemoryDataset):
         dst = torch.tensor(dst, dtype=torch.long)  # [E]
         dst += int(src.max())  # location cell_ids start after user ids
         timestamps = torch.tensor(timestamps, dtype=torch.long)  # [E]
-        user_feats = torch.tensor(user_infos, dtype=torch.float)  # [E, num_user _features]
-        location_feats = torch.tensor(location_infos, dtype=torch.float)  # [E, num_location_features]
-        edge_feats = torch.tensor(edge_infos, dtype=torch.float)  # [E, num_edge_features]
+        if self.feats:
+            user_feats = torch.tensor(user_infos, dtype=torch.float)  # [E, num_user _features]
+            location_feats = torch.tensor(location_infos, dtype=torch.float)  # [E, num_location_features]
+            edge_feats = torch.tensor(edge_infos, dtype=torch.float)  # [E, num_edge_features]
+        else:
+            # Replace with empty feature matrices
+            user_feats = torch.zeros((len(src), 0), dtype=torch.float)
+            location_feats = torch.zeros((len(src), 0), dtype=torch.float)
+            edge_feats = torch.zeros((len(src), 0), dtype=torch.float)
 
         # globally sort by timestamp t_all to ensure strict time causality
         sorted_idx = torch.argsort(timestamps)
@@ -111,10 +118,11 @@ if __name__ == "__main__":
     parser.add_argument("--city", type=str, default="D", help="City index (e.g., A, B, C, D)")
     parser.add_argument("--small", type=bool, default=True, help="Only use users that will be predicted later")
     parser.add_argument("--interpol", type=bool, default=True, help="Interpolation Yes/No")
+    parser.add_argument("--feats", type=bool, default=True, help="Include features Yes/No")
     args = parser.parse_args()
 
     print("=== User-Location Interaction Dataset ===", flush=True)
-    dataset = UserLocationInteractionDataset(root="data", city_idx=args.city, interpol=args.interpol, small=args.small)
+    dataset = UserLocationInteractionDataset(root="data", city_idx=args.city, interpol=args.interpol, small=args.small, feats=args.feats)
     data = dataset[0]
 
     print(f"Number of users: {dataset.num_users}")
