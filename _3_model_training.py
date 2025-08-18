@@ -179,6 +179,7 @@ if __name__ == "__main__":
     parser.add_argument("--city", type=str, default="D", help="City index for dataset")
     parser.add_argument("--interpol", type=bool, default=True, help="Interpolation Yes/No")
     parser.add_argument("--small", type=bool, default=True, help="Only use users that will be predicted later")
+    parser.add_argument("--feats", type=bool, default=True, help="Include features Yes/No")
     parser.add_argument("--epochs", type=int, default=50, help="Number of training epochs")
     parser.add_argument("--patience", type=int, default=10,
                         help="Number of epochs to wait without improvement before stopping.")
@@ -194,7 +195,7 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Model training on device: {device}", flush=True)
 
-    dataset = UserLocationInteractionDataset(root="data", city_idx=args.city, interpol=args.interpol, small=args.small)
+    dataset = UserLocationInteractionDataset(root="data", city_idx=args.city, interpol=args.interpol, small=args.small, feats=args.feats)
     data = dataset[0].to(device)
 
     train_data, val_data, test_data = data.train_val_test_split(val_ratio=0.15, test_ratio=0.15)
