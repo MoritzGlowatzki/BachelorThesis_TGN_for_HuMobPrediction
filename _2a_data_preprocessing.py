@@ -40,6 +40,16 @@ def total_num_of_records():
     print(f"Total Number of Records: {total_num_of_records}")
 
 
+def average_candidate_locations():
+    CITY_DATA_PATH = f"./data/raw/cityD_user_features.csv"
+    data = load_csv_file(CITY_DATA_PATH)
+    data = data[(data["uid"] >= 3000) & (data["uid"] < 6000)]
+    average_candidate_locations = data["user_specific_locations"].apply(json.loads).apply(len).mean()
+
+    print(
+        f"Average number of candidate locations for users that need prediction in city D: {average_candidate_locations}")
+
+
 # -------- Estimations, Calculations, Helper Functions -------- #
 
 def estimate_home_location(df):
