@@ -1,3 +1,4 @@
+import argparse
 import numpy as np
 import pandas as pd
 from geobleu.seq_eval import calc_geobleu_bulk, calc_dtw_bulk
@@ -7,7 +8,6 @@ from _1_data_IO import load_csv_file, store_csv_file
 
 
 # --------- Evaluation Metrics --------- #
-
 def compute_dtw(df):
     """
     Compute the Dynamic Time Warping (DTW) score between true and predicted trajectories (lower is better).
@@ -17,7 +17,7 @@ def compute_dtw(df):
     """
     true = df[["uid", "d", "t", "x_true", "y_true"]].values
     pred = df[["uid", "d", "t", "x_pred", "y_pred"]].values
-    return calc_dtw_bulk(true, pred, processes=6)
+    return calc_dtw_bulk(true, pred, processes=4)
 
 
 def compute_geobleu(df):
@@ -29,7 +29,7 @@ def compute_geobleu(df):
     """
     true = df[["uid", "d", "t", "x_true", "y_true"]].values
     pred = df[["uid", "d", "t", "x_pred", "y_pred"]].values
-    return calc_geobleu_bulk(true, pred, processes=6)
+    return calc_geobleu_bulk(true, pred, processes=4)
 
 
 def compute_mean_euclidean_dist(df):
@@ -39,7 +39,8 @@ def compute_mean_euclidean_dist(df):
     distances = np.sqrt((df["x_true"] - df["x_pred"]) ** 2 + (df["y_true"] - df["y_pred"]) ** 2)
     return distances.mean()
 
-# --------- Main Evaluation Pipeline (Per User) --------- #
+
+# --------- Main Evaluation Pipeline --------- #
 def evaluate_per_user(pred_path, true_path):
     pred_df = load_csv_file(pred_path)
     true_df = load_csv_file(true_path)
@@ -59,34 +60,23 @@ def evaluate_per_user(pred_path, true_path):
     store_csv_file("./data/result/cityD_final_comparison.csv", merged)
 
     print("Compute metrics per user and aggregate...")
-
-    results = []
-    for group in tqdm(merged.groupby["uid", "d"], desc="Evaluating users per day"):
-        uid = group["uid"]
-        dwt_score = compute_dtw(group)
-        geobleu_score = compute_geobleu(group)
-
-        print(f"DTW Score for User {uid}: {dwt_score:.4f}")
-        print(f"GeoBLEU Score for User {uid}: {geobleu_score:.4f}")
-
-        results.append({
-            "uid": uid,
-            "DTW": dwt_score,
-            "GeoBLEU": geobleu_score,
-        })
-
-    per_user_metrics = pd.DataFrame(results)
-
-    # Compute overall averages
-    overall_metrics = per_user_metrics[["DTW", "GeoBLEU"]].mean()
-    print(f"\nOverall DTW Score: {overall_metrics['DTW']:.4f}")
-    print(f"Overall GeoBLEU Score: {overall_metrics['GeoBLEU']:.4f}")
-
+    
+    dtw_score = compute_dtw(merged)
+    print(f"DTW score: {dtw_score:.4f}")
+    geobleu_score = compute_geobleu(merged)
+    print(f"GeoBLEU score: {geobleu_score:.4f}")
     mean_euclidean_dist = compute_mean_euclidean_dist(merged)
     print(f"Mean Euclidean Distance: {mean_euclidean_dist:.4f}")
 
+    return dtw_score, geobleu_score, mean_euclidean_dist
+
 
 if __name__ == "__main__":
-    PREDICTION_RESULT_PATH = "./data/result/cityD_prediction_result.csv"
-    TRUE_DATA_PATH = "./data/dataset_humob_2024/full_city_data/cityD-dataset.csv"
+    parser = argparse.ArgumentParser(description="Evaluate TGN model predictions against ground truth.")
+    parser.add_argument("--city", type=str, default="D", help="City index (e.g., A, B, C, D)")
+    parser.add_argument("--model", type=str, default="last_model_D_50", help="Used model")
+    args = parser.parse_args()
+    
+    PREDICTION_RESULT_PATH = f"./data/result/city{args.city}_prediction_result_{args.model}.csv"
+    TRUE_DATA_PATH = f"./data/dataset_humob_2024/full_city_data/city{args.city}-dataset.csv"
     evaluate_per_user(PREDICTION_RESULT_PATH, TRUE_DATA_PATH)
