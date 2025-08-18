@@ -8,7 +8,7 @@
 >
 > _Bachelor's Thesis in Information Systems (Wirtschaftsinformatik)_
 >
-> ### "Human Mobility Prediction with Continuous-Time Dynamic Graphs and Temporal Graph Networks" <br> *(Vorhersage menschlicher Mobilität mit kontinuierlich-zeitdynamischen Graphen und Temporal Graph Networks)*  
+> ### "Investigating Continuous-Time Dynamic Graphs and Temporal Graph Networks <br> for Human Mobility Prediction in Urban Areas" <br> *(Untersuchung von Continuous-Time Dynamic Graphs und Temporal Graph Networks <br> für die Mobilitätsvorhersage städtischer Bevölkerung)*  
 >
 > **Author:** Moritz Glowatzki  
 > **Examiner:** Prof. Dr. Martin Werner  
