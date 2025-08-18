@@ -1,5 +1,6 @@
+import numpy as np
 import pandas as pd
-from geobleu import calc_dtw_orig, calc_geobleu_orig
+from geobleu.seq_eval import calc_geobleu_bulk, calc_dtw_bulk
 from tqdm import tqdm
 
 from _1_data_IO import load_csv_file, store_csv_file
@@ -14,9 +15,9 @@ def compute_dtw(df):
     DTW measures the similarity between two temporal sequences which may vary in speed.
     Lower DTW values indicate better alignment (less temporal/spatial discrepancy).
     """
-    true = df[["x_true", "y_true"]].values
-    pred = df[["x_pred", "y_pred"]].values
-    return calc_dtw_orig(true, pred)
+    true = df[["uid", "d", "t", "x_true", "y_true"]].values
+    pred = df[["uid", "d", "t", "x_pred", "y_pred"]].values
+    return calc_dtw_bulk(true, pred, processes=6)
 
 
 def compute_geobleu(df):
@@ -26,10 +27,17 @@ def compute_geobleu(df):
     GeoBLEU applies a Gaussian kernel to the spatial distance between predicted and true points,
     rewarding predictions that are spatially close.
     """
-    true = df[["x_true", "y_true"]].values
-    pred = df[["x_pred", "y_pred"]].values
-    return calc_geobleu_orig(true, pred, max_n=5, beta=0.5)
+    true = df[["uid", "d", "t", "x_true", "y_true"]].values
+    pred = df[["uid", "d", "t", "x_pred", "y_pred"]].values
+    return calc_geobleu_bulk(true, pred, processes=6)
 
+
+def compute_mean_euclidean_dist(df):
+    """
+    Compute the mean Euclidean distance between true and predicted points.
+    """
+    distances = np.sqrt((df["x_true"] - df["x_pred"]) ** 2 + (df["y_true"] - df["y_pred"]) ** 2)
+    return distances.mean()
 
 # --------- Main Evaluation Pipeline (Per User) --------- #
 def evaluate_per_user(pred_path, true_path):
@@ -53,8 +61,8 @@ def evaluate_per_user(pred_path, true_path):
     print("Compute metrics per user and aggregate...")
 
     results = []
-    for uid in tqdm(merged["uid"].unique(), desc="Evaluating users"):
-        group = merged[merged["uid"] == uid]
+    for group in tqdm(merged.groupby["uid", "d"], desc="Evaluating users per day"):
+        uid = group["uid"]
         dwt_score = compute_dtw(group)
         geobleu_score = compute_geobleu(group)
 
@@ -71,11 +79,11 @@ def evaluate_per_user(pred_path, true_path):
 
     # Compute overall averages
     overall_metrics = per_user_metrics[["DTW", "GeoBLEU"]].mean()
-
     print(f"\nOverall DTW Score: {overall_metrics['DTW']:.4f}")
     print(f"Overall GeoBLEU Score: {overall_metrics['GeoBLEU']:.4f}")
 
-    return overall_metrics
+    mean_euclidean_dist = compute_mean_euclidean_dist(merged)
+    print(f"Mean Euclidean Distance: {mean_euclidean_dist:.4f}")
 
 
 if __name__ == "__main__":
